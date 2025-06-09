@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: proyecto-cloud
+  name: proyecto-cloud-staging
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/sudo-init-project/infra-app-k8s  # Reemplaza con tu repo real
+    repoURL: https://github.com/sudo-init-project/infra-app-k8s
     targetRevision: master
-    path: .
+    path: overlays/staging  # ✅ Apunta al overlay de staging
   destination:
     server: https://kubernetes.default.svc
     namespace: proyecto-cloud

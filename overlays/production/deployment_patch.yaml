@@ -1,0 +1,20 @@
+# Patches específicos para production
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: proyecto-cloud
+spec:
+  replicas: 3  # Más réplicas
+  template:
+    spec:
+      containers:
+      - name: backend
+        resources:
+          requests:
+            memory: "1Gi"  # Más recursos en production porque..produccion igual es obvio 
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+

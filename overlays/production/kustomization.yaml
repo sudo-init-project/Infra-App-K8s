@@ -1,0 +1,18 @@
+#Las mismas configuraciones pero para produccion con los tags etc
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+namePrefix: prod-
+nameSuffix: -prod
+
+patchesStrategicMerge:
+  - deployment_patch.yaml
+
+images:
+  - name: facundo676/backend-shop
+    newTag: v1.0.0
+  - name: facundo676/frontend-shop
+    newTag: v1.0.0

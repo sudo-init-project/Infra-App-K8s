@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: proyecto-cloud
+spec:
+  replicas: 1  # Menos réplicas en staging porque...staging
+  template:
+    spec:
+      containers:
+      - name: frontend
+        resources:
+          requests:
+            memory: "128Mi"  # Menos recursos en staging porque...staging
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "125m"
