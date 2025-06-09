@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: proyecto-cloud
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/sudo-init-project/infra-app-k8s  # Reemplaza con tu repo real
+    targetRevision: master
+    path: .
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: proyectoCloud
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
