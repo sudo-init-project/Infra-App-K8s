@@ -11,7 +11,7 @@ spec:
     path: .
   destination:
     server: https://kubernetes.default.svc
-    namespace: proyectoCloud
+    namespace: proyecto-cloud
   syncPolicy:
     automated:
       prune: true
