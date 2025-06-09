@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: proyecto-cloud
+  namespace: proyectoCloud
 spec:
   replicas: 2
   selector:
@@ -25,17 +25,3 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "250m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: frontend-service
-  namespace: proyectoCloud
-spec:
-  selector:
-    app: frontend
-  ports:
-  - port: 80
-    targetPort: 80
-    protocol: TCP
-  type: ClusterIP
