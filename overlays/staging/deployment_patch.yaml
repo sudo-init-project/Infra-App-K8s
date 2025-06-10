@@ -16,3 +16,13 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "125m"
+            
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: proyecto-cloud
+spec:
+  replicas: 1  # Solo 1 réplica para staging
