@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/sudo-init-project/infra-app-k8s
     targetRevision: master
-    path: overlays/staging  # ✅ Apunta al overlay de staging
+    path: overlays/staging #apunta a staging
   destination:
     server: https://kubernetes.default.svc
     namespace: proyecto-cloud
@@ -18,3 +18,9 @@ spec:
       selfHeal: true
     syncOptions:
     - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
