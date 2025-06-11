@@ -36,6 +36,20 @@ spec:
             secretKeyRef:
               name: app-secret
               key: jwt-secret
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          failureThreshold: 3
+          timeoutSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 3
         resources:
           requests:
             memory: "512Mi"
