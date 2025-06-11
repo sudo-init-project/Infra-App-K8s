@@ -4,7 +4,7 @@ metadata:
   name: frontend
   namespace: proyecto-cloud
 spec:
-  replicas: 1  # Testing webhook porque...staging
+  replicas: 2  # Testing webhook porque...staging
   template:
     spec:
       containers:
