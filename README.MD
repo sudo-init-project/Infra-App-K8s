@@ -1,6 +1,6 @@
 # Infra-App-K8s
 
-Infraestructura Kubernetes para aplicación E-Eommerce en SpringBoot con GitOps.
+Infraestructura Kubernetes para aplicación E-Commerce en SpringBoot con GitOps.
 
 ## Descripción
 
