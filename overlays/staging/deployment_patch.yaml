@@ -25,4 +25,15 @@ metadata:
   name: backend
   namespace: proyecto-cloud
 spec:
-  replicas: 1  # Solo 1 réplica para staging
+  replicas: 1  # STAGING: menos réplicas (base tiene 2)
+  template:
+    spec:
+      containers:
+      - name: backend
+        resources:
+          requests:
+            memory: "256Mi"  # STAGING: menos recursos
+            cpu: "125m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
