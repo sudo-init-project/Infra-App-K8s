@@ -6,12 +6,12 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/sudo-init-project/infra-app-k8s
+    repoURL: https://github.com/sudo-init-project/Infra-App-K8s
     targetRevision: master
-    path: overlays/staging #apunta a staging
+    path: overlays/staging
   destination:
     server: https://kubernetes.default.svc
-    namespace: proyecto-cloud
+    namespace: proyecto-cloud-staging
   syncPolicy:
     automated:
       prune: true
