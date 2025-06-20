@@ -6,4 +6,4 @@ resources:
 
 images:
   - name: facundo676/backend-shop
-    newTag: latest  # Este tag se actualiza automáticamente por CI/CD...espero
+    newTag: 20250620-223237-9dc191b
