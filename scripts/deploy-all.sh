@@ -43,7 +43,7 @@ esac
 # Verificar dependencias
 #########################################
 echo "🔍 Verificando dependencias..."
-for cmd in minikube kubectl helm envsubst; do
+for cmd in minikube kubectl envsubst; do
   if ! command -v $cmd &> /dev/null; then
     echo "❌ $cmd no está instalado"
     exit 1
@@ -113,18 +113,24 @@ echo ""
 # Aplicar secrets con variables de entorno
 #########################################
 echo "🔐 Aplicando secrets para ambiente $ENVIRONMENT..."
+# Crear el namespace primero si no existe
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+# Aplicar secrets usando envsubst
 envsubst < base/secrets.yaml | kubectl apply -f -
 echo "✅ Secrets aplicados"
 echo ""
 
 #########################################
-# Desplegar aplicación en el ambiente
+# Desplegar aplicación usando Kustomize
 #########################################
-echo "🚀 Desplegando aplicación en ambiente $ENVIRONMENT..."
-kubectl apply -f argocd/${ENVIRONMENT}-app.yaml
+echo "🚀 Desplegando aplicación en ambiente $ENVIRONMENT usando Kustomize..."
 
-echo "⏳ Esperando a que la aplicación esté sincronizada..."
-sleep 10
+# Aplicar la configuración base + overlay del ambiente
+kubectl apply -k overlays/$ENVIRONMENT
+
+echo "⏳ Esperando a que la aplicación esté lista..."
+kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout=300s
 
 #########################################
 # Obtener información de acceso
