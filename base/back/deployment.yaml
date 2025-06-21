@@ -20,38 +20,22 @@ spec:
         - containerPort: 8080
         env:
         - name: SPRING_DATASOURCE_URL
-          value: jdbc:mysql://mysql-service:3306/dbejercicio2final
+          value: jdbc:mysql://mysql-service:3306/dbejercicio2final  # Kustomize cambiará mysql-service
         - name: SPRING_DATASOURCE_USERNAME
           valueFrom:
             secretKeyRef:
-              name: mysql-secret
+              name: mysql-secret  # Kustomize cambiará esto automáticamente
               key: username
         - name: SPRING_DATASOURCE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mysql-secret
+              name: mysql-secret  # Kustomize cambiará esto automáticamente
               key: password
-        - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
-          value: com.mysql.cj.jdbc.Driver
-        - name: SPRING_JPA_DATABASE_PLATFORM
-          value: org.hibernate.dialect.MySQLDialect
-        - name: SPRING_JPA_HIBERNATE_DDL_AUTO
-          value: "none"
-        - name: SPRING_JPA_SHOW_SQL
-          value: "true"
-        - name: SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL
-          value: "true"
-        - name: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
-          value: org.hibernate.dialect.MySQLDialect
-        - name: JWT_SECRET_KEY
+        - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: app-secret
+              name: app-secret  # Kustomize cambiará esto automáticamente
               key: jwt-secret
-        - name: LOGGING_LEVEL_ROOT
-          value: INFO
-        - name: LOGGING_LEVEL_AR_COM_AYI
-          value: DEBUG
         livenessProbe:
           httpGet:
             path: /actuator/health
@@ -65,7 +49,7 @@ spec:
             path: /actuator/health
             port: 8080
           initialDelaySeconds: 60
-          periodSeconds: 10
+          periodSeconds: 15
           failureThreshold: 3
           timeoutSeconds: 5
         resources:

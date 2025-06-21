@@ -21,19 +21,19 @@ spec:
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mysql-secret
+              name: mysql-secret  # Kustomize cambiará esto automáticamente
               key: root-password
         - name: MYSQL_DATABASE
           value: dbejercicio2final
         - name: MYSQL_USER
           valueFrom:
             secretKeyRef:
-              name: mysql-secret
+              name: mysql-secret  # Kustomize cambiará esto automáticamente
               key: username
         - name: MYSQL_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mysql-secret
+              name: mysql-secret  # Kustomize cambiará esto automáticamente
               key: password
         ports:
         - containerPort: 3306
@@ -49,10 +49,30 @@ spec:
           limits:
             memory: "2Gi"
             cpu: "1000m"
+        readinessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
       volumes:
       - name: init-scripts
         configMap:
-          name: init-db-script
+          name: init-db-script  # Kustomize cambiará esto automáticamente
   volumeClaimTemplates:
   - metadata:
       name: mysql-data
