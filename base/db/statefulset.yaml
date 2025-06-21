@@ -57,7 +57,8 @@ spec:
   - metadata:
       name: mysql-data
     spec:
-      accessModes: [ "ReadWriteOnce" ]
+      accessModes: 
+      - ReadWriteOnce
       resources:
         requests:
           storage: 10Gi

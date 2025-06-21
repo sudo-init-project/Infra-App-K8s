@@ -1,29 +1,36 @@
-# Variables de entorno (contienen credenciales)
+# Archivos de entorno local
 .env
 .env.local
 .env.production
-.env.staging
-.env.development
 
-# Archivos temporales
-*.tmp
-*.temp
-/temp/
+# Secrets temporales (NO commitear)
+*-secret.yaml
+temp-secrets/
+
+# Sealed Secrets SÍ se pueden commitear
+# Los sealed secrets están CIFRADOS y son seguros en Git
+!*-sealed-secret.yaml
 
 # Logs
 *.log
 logs/
 
-# Archivos de configuración local
-config.local.yaml
-secrets.local.yaml
+# Archivos temporales
+*.tmp
+*.temp
 
-# Directorios de IDEs
+# Directorios de build
+target/
+build/
+dist/
+node_modules/
+
+# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Archivos de sistema
+# Sistema
 .DS_Store
 Thumbs.db

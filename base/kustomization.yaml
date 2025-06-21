@@ -5,7 +5,13 @@ namespace: proyecto-cloud
 
 resources:
   - namespace.yaml
-  - secrets.yaml
+  # Remover secrets.yaml problemático
+  # - secrets.yaml
+  
+  # Usar Sealed Secrets en su lugar (se crearán con el script)
+  - mysql-sealed-secret.yaml
+  - app-sealed-secret.yaml
+  
   - db/configmap.yaml
   - db/statefulset.yaml
   - db/service.yaml
