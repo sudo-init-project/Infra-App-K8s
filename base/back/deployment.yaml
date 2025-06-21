@@ -36,15 +36,16 @@ spec:
             secretKeyRef:
               name: app-secret
               key: jwt-secret
-        # Health checks más permisivos para evitar crashloop
+        # Health checks MUY SUAVES para evitar crashloop
         readinessProbe:
           httpGet:
             path: /actuator/health
             port: 8080
-          initialDelaySeconds: 60
+          initialDelaySeconds: 90
           periodSeconds: 30
           timeoutSeconds: 10
-          failureThreshold: 5
+          failureThreshold: 10
+          successThreshold: 1
         livenessProbe:
           httpGet:
             path: /actuator/health
@@ -52,7 +53,7 @@ spec:
           initialDelaySeconds: 120
           periodSeconds: 60
           timeoutSeconds: 10
-          failureThreshold: 3
+          failureThreshold: 5
         resources:
           requests:
             memory: "512Mi"
