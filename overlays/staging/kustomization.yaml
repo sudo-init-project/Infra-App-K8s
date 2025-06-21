@@ -5,14 +5,12 @@ namespace: proyecto-cloud-staging
 
 resources:
   - ../../base
-  - nginx-configmap.yaml
 
 namePrefix: staging-
 nameSuffix: -stg
 
 patches:
   - path: deployment_patch.yaml
-  - path: frontend-deployment-patch.yaml
 
 images:
   - name: facundo676/backend-shop
