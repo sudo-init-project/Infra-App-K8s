@@ -15,12 +15,14 @@ export MYSQL_PASSWORD="${MYSQL_PASSWORD:-devpass123}"
 export MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-rootpass123}"
 export JWT_SECRET="${JWT_SECRET:-GjPEfbM33noYJdEX4fymEken7svn6l81Xtnj9sX7Y7E=}"
 
+# Variable para controlar el método de despliegue
+ARGOCD_DEPLOYED=false
+
 clear
 echo "🚀 ============================================"
 echo "🚀 DESPLEGANDO AMBIENTE: $ENVIRONMENT"
 echo "🚀 ============================================"
 date
-echo ""
 
 #########################################
 # Validar ambiente
@@ -43,7 +45,7 @@ esac
 # Verificar dependencias
 #########################################
 echo "🔍 Verificando dependencias..."
-for cmd in minikube kubectl helm envsubst; do
+for cmd in minikube kubectl envsubst; do
   if ! command -v $cmd &> /dev/null; then
     echo "❌ $cmd no está instalado"
     exit 1
@@ -56,6 +58,15 @@ echo ""
 # Iniciar Minikube
 #########################################
 echo "🚀 Iniciando Minikube con perfil $PROFILE..."
+
+# Verificar memoria disponible de Docker
+DOCKER_MEMORY=$(docker system info --format '{{.MemTotal}}' 2>/dev/null | grep -o '[0-9]*' | head -1)
+if [ -n "$DOCKER_MEMORY" ] && [ "$DOCKER_MEMORY" -lt 8000000000 ]; then
+  echo "⚠️ Docker tiene poca memoria disponible. Reduciendo recursos..."
+  MEMORY=4096
+  CPUS=2
+fi
+
 if minikube status -p "$PROFILE" | grep -q "Running"; then
   echo "🟢 Minikube ya está corriendo en el perfil $PROFILE"
 else
@@ -63,7 +74,13 @@ else
   minikube start -p "$PROFILE" \
     --cpus="$CPUS" \
     --memory="$MEMORY" \
-    --addons=metrics-server,dashboard,ingress
+    --addons=metrics-server,dashboard,ingress || {
+    echo "❌ Error iniciando Minikube. Intentando con recursos reducidos..."
+    minikube start -p "$PROFILE" \
+      --cpus=2 \
+      --memory=4096 \
+      --addons=metrics-server,dashboard,ingress
+  }
 fi
 echo ""
 
@@ -110,21 +127,86 @@ fi
 echo ""
 
 #########################################
-# Aplicar secrets con variables de entorno
+# Aplicar aplicación de ArgoCD (si existe)
 #########################################
-echo "🔐 Aplicando secrets para ambiente $ENVIRONMENT..."
-envsubst < base/secrets.yaml | kubectl apply -f -
-echo "✅ Secrets aplicados"
+if [ -f "argocd/${ENVIRONMENT}-app.yaml" ]; then
+  echo "🎯 Desplegando aplicación ArgoCD para $ENVIRONMENT..."
+  kubectl apply -f argocd/${ENVIRONMENT}-app.yaml
+  echo "✅ Aplicación ArgoCD creada"
+  
+  # Esperar a que ArgoCD sincronice automáticamente
+  echo "⏳ Esperando sincronización automática de ArgoCD..."
+  sleep 10
+  
+  # Verificar si la sincronización automática funcionó
+  echo "📋 Verificando estado de la aplicación..."
+  if kubectl get application "proyecto-cloud-$ENVIRONMENT" -n argocd >/dev/null 2>&1; then
+    # Esperar un poco más para la sincronización
+    echo "⏳ Aplicación encontrada, esperando sincronización..."
+    sleep 15
+    
+    # Verificar si los recursos fueron desplegados por ArgoCD
+    if kubectl get pods -n "proyecto-cloud-$ENVIRONMENT" >/dev/null 2>&1 && [ "$(kubectl get pods -n "proyecto-cloud-$ENVIRONMENT" --no-headers | wc -l)" -gt 0 ]; then
+      echo "✅ ArgoCD desplegó los recursos exitosamente"
+      ARGOCD_DEPLOYED=true
+    else
+      echo "⚠️ ArgoCD no desplegó los recursos automáticamente"
+      ARGOCD_DEPLOYED=false
+    fi
+  else
+    echo "❌ No se pudo crear la aplicación de ArgoCD"
+    ARGOCD_DEPLOYED=false
+  fi
+else
+  echo "⚠️ No se encontró argocd/${ENVIRONMENT}-app.yaml - usando Kustomize directo"
+  ARGOCD_DEPLOYED=false
+fi
 echo ""
 
 #########################################
-# Desplegar aplicación en el ambiente
+# Aplicar secrets con variables de entorno
 #########################################
-echo "🚀 Desplegando aplicación en ambiente $ENVIRONMENT..."
-kubectl apply -f argocd/${ENVIRONMENT}-app.yaml
+echo "🔐 Aplicando secrets para ambiente $ENVIRONMENT..."
+# Crear el namespace primero si no existe
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-echo "⏳ Esperando a que la aplicación esté sincronizada..."
-sleep 10
+# Crear un archivo temporal de secrets con el namespace correcto
+TEMP_SECRETS=$(mktemp)
+cat base/secrets.yaml | sed "s/namespace: proyecto-cloud/namespace: $NAMESPACE/g" > "$TEMP_SECRETS"
+
+# Aplicar secrets usando envsubst
+envsubst < "$TEMP_SECRETS" | kubectl apply -f -
+
+# Limpiar archivo temporal
+rm "$TEMP_SECRETS"
+
+echo "✅ Secrets aplicados en namespace $NAMESPACE"
+echo ""
+
+#########################################
+# Desplegar aplicación usando Kustomize (solo si ArgoCD no lo hizo)
+#########################################
+if [ "$ARGOCD_DEPLOYED" = true ]; then
+  echo "🎉 ArgoCD ya desplegó la aplicación exitosamente"
+  echo "⏩ Saltando despliegue manual con Kustomize"
+else
+  echo "🚀 Desplegando aplicación en ambiente $ENVIRONMENT usando Kustomize..."
+
+  # Verificar que exista el overlay del ambiente
+  if [ ! -d "overlays/$ENVIRONMENT" ]; then
+    echo "❌ No existe el directorio overlays/$ENVIRONMENT"
+    echo "📂 Directorios disponibles:"
+    ls -la overlays/
+    exit 1
+  fi
+
+  # Aplicar la configuración base + overlay del ambiente
+  echo "📝 Aplicando kustomization desde overlays/$ENVIRONMENT"
+  kubectl apply -k overlays/$ENVIRONMENT
+
+  echo "⏳ Esperando a que los deployments estén listos..."
+  kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout=300s || echo "⚠️ Algunos deployments tardaron más de lo esperado"
+fi
 
 #########################################
 # Obtener información de acceso
@@ -138,6 +220,7 @@ echo "📊 Información del cluster:"
 echo "   - Perfil: $PROFILE"
 echo "   - Namespace: $NAMESPACE"
 echo "   - Contexto: $CONTEXT"
+echo "   - Método de despliegue: $([ "$ARGOCD_DEPLOYED" = true ] && echo "ArgoCD GitOps" || echo "Kustomize directo")"
 echo ""
 
 # IP de Minikube
@@ -157,16 +240,33 @@ echo "📱 Servicios desplegados:"
 kubectl get services -n "$NAMESPACE" 2>/dev/null || echo "   - Esperando despliegue..."
 echo ""
 
+# Estado de ArgoCD si fue usado
+if [ "$ARGOCD_DEPLOYED" = true ]; then
+  echo "🔄 Estado de ArgoCD Application:"
+  kubectl get applications -n argocd 2>/dev/null || echo "   - Error obteniendo applications"
+  echo ""
+fi
+
 echo "🔧 Comandos útiles:"
 echo "   kubectl get pods -n $NAMESPACE"
 echo "   kubectl logs -f deployment/frontend -n $NAMESPACE"
 echo "   minikube dashboard -p $PROFILE"
+if [ "$ARGOCD_DEPLOYED" = true ]; then
+  echo "   # Ver aplicación en ArgoCD:"
+  echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
+fi
 echo ""
 
 # Port-forward para ArgoCD si no hay ingress
 echo "🔗 Para acceder a ArgoCD:"
 echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
-echo "   Luego ir a: http://localhost:8080"
+echo "   Luego ir a: https://localhost:8080"
 echo ""
 
-echo "✅ ¡Despliegue completado exitosamente!"
+if [ "$ARGOCD_DEPLOYED" = true ]; then
+  echo "✅ ¡Despliegue GitOps completado exitosamente!"
+  echo "🎯 Tu aplicación está siendo gestionada por ArgoCD"
+else
+  echo "✅ ¡Despliegue completado exitosamente!"
+  echo "⚠️ Aplicación desplegada directamente con Kustomize (no GitOps)"
+fi
