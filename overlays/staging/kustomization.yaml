@@ -4,7 +4,7 @@ kind: Kustomization
 # Cambiar namespace destino
 namespace: proyecto-cloud-staging
 
-# Referencia a los manifiestos base (sintaxis actualizada)
+# Referencia a los manifiestos base
 resources:
   - ../../base
 
@@ -12,7 +12,7 @@ resources:
 namePrefix: staging-
 nameSuffix: -stg
 
-# Patches específicos para staging (sintaxis actualizada)
+# Patches específicos para staging
 patches:
   - path: deployment_patch.yaml
 
