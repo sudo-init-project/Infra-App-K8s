@@ -20,20 +20,6 @@ echo "🚀 ============================================"
 echo "🚀 DESPLEGANDO AMBIENTE: $ENVIRONMENT"
 echo "🚀 ============================================"
 date
-#########################################
-# Aplicar aplicación de ArgoCD (si existe)
-#########################################
-if [ -f "argocd/${ENVIRONMENT}-app.yaml" ]; then
-  echo "🎯 Desplegando aplicación ArgoCD para $ENVIRONMENT..."
-  kubectl apply -f argocd/${ENVIRONMENT}-app.yaml
-  echo "✅ Aplicación ArgoCD creada"
-  
-  # Esperar a que ArgoCD sincronice
-  echo "⏳ Esperando sincronización de ArgoCD..."
-  sleep 5
-else
-  echo "⚠️ No se encontró argocd/${ENVIRONMENT}-app.yaml - solo usando Kustomize directo"
-fi
 echo ""
 
 #########################################
@@ -57,7 +43,7 @@ esac
 # Verificar dependencias
 #########################################
 echo "🔍 Verificando dependencias..."
-for cmd in minikube kubectl envsubst; do
+for cmd in minikube kubectl helm envsubst; do
   if ! command -v $cmd &> /dev/null; then
     echo "❌ $cmd no está instalado"
     exit 1
@@ -70,15 +56,6 @@ echo ""
 # Iniciar Minikube
 #########################################
 echo "🚀 Iniciando Minikube con perfil $PROFILE..."
-
-# Verificar memoria disponible de Docker
-DOCKER_MEMORY=$(docker system info --format '{{.MemTotal}}' 2>/dev/null | grep -o '[0-9]*' | head -1)
-if [ -n "$DOCKER_MEMORY" ] && [ "$DOCKER_MEMORY" -lt 8000000000 ]; then
-  echo "⚠️ Docker tiene poca memoria disponible. Reduciendo recursos..."
-  MEMORY=4096
-  CPUS=2
-fi
-
 if minikube status -p "$PROFILE" | grep -q "Running"; then
   echo "🟢 Minikube ya está corriendo en el perfil $PROFILE"
 else
@@ -86,13 +63,7 @@ else
   minikube start -p "$PROFILE" \
     --cpus="$CPUS" \
     --memory="$MEMORY" \
-    --addons=metrics-server,dashboard,ingress || {
-    echo "❌ Error iniciando Minikube. Intentando con recursos reducidos..."
-    minikube start -p "$PROFILE" \
-      --cpus=2 \
-      --memory=4096 \
-      --addons=metrics-server,dashboard,ingress
-  }
+    --addons=metrics-server,dashboard,ingress
 fi
 echo ""
 
@@ -142,41 +113,18 @@ echo ""
 # Aplicar secrets con variables de entorno
 #########################################
 echo "🔐 Aplicando secrets para ambiente $ENVIRONMENT..."
-# Crear el namespace primero si no existe
-kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-
-# Crear un archivo temporal de secrets con el namespace correcto
-TEMP_SECRETS=$(mktemp)
-cat base/secrets.yaml | sed "s/namespace: proyecto-cloud/namespace: $NAMESPACE/g" > "$TEMP_SECRETS"
-
-# Aplicar secrets usando envsubst
-envsubst < "$TEMP_SECRETS" | kubectl apply -f -
-
-# Limpiar archivo temporal
-rm "$TEMP_SECRETS"
-
-echo "✅ Secrets aplicados en namespace $NAMESPACE"
+envsubst < base/secrets.yaml | kubectl apply -f -
+echo "✅ Secrets aplicados"
 echo ""
 
 #########################################
-# Desplegar aplicación usando Kustomize
+# Desplegar aplicación en el ambiente
 #########################################
-echo "🚀 Desplegando aplicación en ambiente $ENVIRONMENT usando Kustomize..."
+echo "🚀 Desplegando aplicación en ambiente $ENVIRONMENT..."
+kubectl apply -f argocd/${ENVIRONMENT}-app.yaml
 
-# Verificar que exista el overlay del ambiente
-if [ ! -d "overlays/$ENVIRONMENT" ]; then
-  echo "❌ No existe el directorio overlays/$ENVIRONMENT"
-  echo "📂 Directorios disponibles:"
-  ls -la overlays/
-  exit 1
-fi
-
-# Aplicar la configuración base + overlay del ambiente
-echo "📝 Aplicando kustomization desde overlays/$ENVIRONMENT"
-kubectl apply -k overlays/$ENVIRONMENT
-
-echo "⏳ Esperando a que los deployments estén listos..."
-kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout=300s || echo "⚠️ Algunos deployments tardaron más de lo esperado"
+echo "⏳ Esperando a que la aplicación esté sincronizada..."
+sleep 10
 
 #########################################
 # Obtener información de acceso

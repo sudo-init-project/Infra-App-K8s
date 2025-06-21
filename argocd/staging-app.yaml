@@ -3,11 +3,13 @@ kind: Application
 metadata:
   name: proyecto-cloud-staging
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: https://github.com/sudo-init-project/Infra-App-K8s
-    targetRevision: master
+    targetRevision: HEAD
     path: overlays/staging
   destination:
     server: https://kubernetes.default.svc
@@ -18,6 +20,7 @@ spec:
       selfHeal: true
     syncOptions:
     - CreateNamespace=true
+    - ServerSideApply=true
     retry:
       limit: 5
       backoff:
