@@ -5,58 +5,46 @@ metadata:
   namespace: proyecto-cloud
 data:
   init.sql: |
-    CREATE TABLE `clientes` (
-      `id_cliente` int(11) NOT NULL,
+    -- Crear usuario para la aplicación
+    CREATE USER IF NOT EXISTS 'appuser'@'%' IDENTIFIED BY 'devpass123';
+    GRANT ALL PRIVILEGES ON dbejercicio2final.* TO 'appuser'@'%';
+    FLUSH PRIVILEGES;
+
+    -- Crear base de datos si no existe
+    CREATE DATABASE IF NOT EXISTS dbejercicio2final;
+    USE dbejercicio2final;
+
+    CREATE TABLE IF NOT EXISTS `clientes` (
+      `id_cliente` int(11) NOT NULL AUTO_INCREMENT,
       `nombre` varchar(255) NOT NULL,
       `apellido` varchar(255) NOT NULL,
       `fecha_ingreso` varchar(255) NOT NULL,
       `domicilio` varchar(255) NOT NULL,
-      `telefono` varchar(15) NOT NULL
+      `telefono` varchar(15) NOT NULL,
+      PRIMARY KEY (`id_cliente`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-    INSERT INTO `clientes` (`id_cliente`, `nombre`, `apellido`, `fecha_ingreso`, `domicilio`, `telefono`) VALUES
-    (1, 'Tomas', 'Matadero', '2025-05-13', 'Avenida Siempre Viva', '261746235');
-
-    CREATE TABLE `productos` (
-      `id_producto` int(11) NOT NULL,
+    CREATE TABLE IF NOT EXISTS `productos` (
+      `id_producto` int(11) NOT NULL AUTO_INCREMENT,
       `codigo_ean` varchar(255) NOT NULL,
       `nombre_producto` varchar(255) NOT NULL,
       `descripcion_producto` varchar(255) NOT NULL,
       `tipo` varchar(255) NOT NULL,
       `marca` varchar(255) NOT NULL,
       `precio` double NOT NULL,
-      `stock` int(11) NOT NULL
+      `stock` int(11) NOT NULL,
+      PRIMARY KEY (`id_producto`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-    INSERT INTO `productos` (`id_producto`, `codigo_ean`, `nombre_producto`, `descripcion_producto`, `tipo`, `marca`, `precio`, `stock`) VALUES
-    (1, '9079', 'Vino Tinto', 'Vino tinto de caja', 'tipo marron', 'tinto humilde', 200, 1);
-
-    CREATE TABLE `usuarios` (
-      `id_usuario` int(11) NOT NULL,
+    CREATE TABLE IF NOT EXISTS `usuarios` (
+      `id_usuario` int(11) NOT NULL AUTO_INCREMENT,
       `nombre_usuario` varchar(255) NOT NULL,
       `password_usuario` varchar(255) NOT NULL,
-      `role` varchar(50) DEFAULT NULL
+      `role` varchar(50) DEFAULT NULL,
+      PRIMARY KEY (`id_usuario`),
+      UNIQUE KEY `nombre_usuario` (`nombre_usuario`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-    INSERT INTO `usuarios` (`id_usuario`, `nombre_usuario`, `password_usuario`, `role`) VALUES
-    (1, 'admin', 'admin', 'ADMIN');
-
-    ALTER TABLE `clientes`
-      ADD PRIMARY KEY (`id_cliente`);
-
-    ALTER TABLE `productos`
-      ADD PRIMARY KEY (`id_producto`);
-
-    ALTER TABLE `usuarios`
-      ADD PRIMARY KEY (`id_usuario`),
-      ADD UNIQUE KEY `nombre_usuario` (`nombre_usuario`),
-      ADD UNIQUE KEY `UKof5vabgukahdwmgxk4kjrbu98` (`nombre_usuario`);
-
-    ALTER TABLE `clientes`
-      MODIFY `id_cliente` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-
-    ALTER TABLE `productos`
-      MODIFY `id_producto` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-
-    ALTER TABLE `usuarios`
-      MODIFY `id_usuario` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+    INSERT IGNORE INTO `usuarios` (`id_usuario`, `nombre_usuario`, `password_usuario`, `role`) VALUES (1, 'admin', 'admin', 'ADMIN');
+    INSERT IGNORE INTO `clientes` (`id_cliente`, `nombre`, `apellido`, `fecha_ingreso`, `domicilio`, `telefono`) VALUES (1, 'Tomas', 'Matadero', '2025-05-13', 'Avenida Siempre Viva', '261746235');
+    INSERT IGNORE INTO `productos` (`id_producto`, `codigo_ean`, `nombre_producto`, `descripcion_producto`, `tipo`, `marca`, `precio`, `stock`) VALUES (1, '9079', 'Vino Tinto', 'Vino tinto de caja', 'tipo marron', 'tinto humilde', 200, 1);

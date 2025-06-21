@@ -7,7 +7,7 @@ set -e
 
 ENVIRONMENT=${1:-staging}
 CPUS=${2:-4}
-MEMORY=${3:-8192}
+MEMORY=${3:-4092}
 
 # Variables de entorno por defecto
 export MYSQL_USER="${MYSQL_USER:-appuser}"
@@ -21,7 +21,9 @@ ARGOCD_DEPLOYED=false
 # Cargar variables desde .env si existe
 if [ -f ".env" ]; then
   echo "🔐 Cargando variables desde .env"
+  set -a  # Automatically export all variables
   source .env
+  set +a  # Stop automatically exporting
 fi
 
 clear
