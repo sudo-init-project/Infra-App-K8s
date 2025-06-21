@@ -20,6 +20,20 @@ echo "🚀 ============================================"
 echo "🚀 DESPLEGANDO AMBIENTE: $ENVIRONMENT"
 echo "🚀 ============================================"
 date
+#########################################
+# Aplicar aplicación de ArgoCD (si existe)
+#########################################
+if [ -f "argocd/${ENVIRONMENT}-app.yaml" ]; then
+  echo "🎯 Desplegando aplicación ArgoCD para $ENVIRONMENT..."
+  kubectl apply -f argocd/${ENVIRONMENT}-app.yaml
+  echo "✅ Aplicación ArgoCD creada"
+  
+  # Esperar a que ArgoCD sincronice
+  echo "⏳ Esperando sincronización de ArgoCD..."
+  sleep 5
+else
+  echo "⚠️ No se encontró argocd/${ENVIRONMENT}-app.yaml - solo usando Kustomize directo"
+fi
 echo ""
 
 #########################################
