@@ -70,6 +70,15 @@ echo ""
 # Iniciar Minikube
 #########################################
 echo "🚀 Iniciando Minikube con perfil $PROFILE..."
+
+# Verificar memoria disponible de Docker
+DOCKER_MEMORY=$(docker system info --format '{{.MemTotal}}' 2>/dev/null | grep -o '[0-9]*' | head -1)
+if [ -n "$DOCKER_MEMORY" ] && [ "$DOCKER_MEMORY" -lt 8000000000 ]; then
+  echo "⚠️ Docker tiene poca memoria disponible. Reduciendo recursos..."
+  MEMORY=4096
+  CPUS=2
+fi
+
 if minikube status -p "$PROFILE" | grep -q "Running"; then
   echo "🟢 Minikube ya está corriendo en el perfil $PROFILE"
 else
@@ -77,7 +86,13 @@ else
   minikube start -p "$PROFILE" \
     --cpus="$CPUS" \
     --memory="$MEMORY" \
-    --addons=metrics-server,dashboard,ingress
+    --addons=metrics-server,dashboard,ingress || {
+    echo "❌ Error iniciando Minikube. Intentando con recursos reducidos..."
+    minikube start -p "$PROFILE" \
+      --cpus=2 \
+      --memory=4096 \
+      --addons=metrics-server,dashboard,ingress
+  }
 fi
 echo ""
 
