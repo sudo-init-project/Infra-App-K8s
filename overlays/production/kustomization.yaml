@@ -1,18 +1,22 @@
-#Las mismas configuraciones pero para produccion con los tags etc
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Namespace destino para production
 namespace: proyecto-cloud-production
 
-bases:
+# Referencia a los manifiestos base
+resources:
   - ../../base
 
+# Configuración específica para production
 namePrefix: prod-
 nameSuffix: -prod
 
-patchesStrategicMerge:
-  - deployment_patch.yaml
+# Patches específicos para production
+patches:
+  - path: deployment_patch.yaml
 
+# Imágenes específicas para production
 images:
   - name: facundo676/backend-shop
     newTag: v1.0.0

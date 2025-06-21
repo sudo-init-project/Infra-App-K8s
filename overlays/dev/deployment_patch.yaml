@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: proyecto-cloud
+spec:
+  replicas: 1  # DEV: mínimas réplicas para desarrollo
+  template:
+    spec:
+      containers:
+      - name: frontend
+        resources:
+          requests:
+            memory: "64Mi"  # DEV: recursos mínimos
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "50m"
+            
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: proyecto-cloud
+spec:
+  replicas: 1  # DEV: solo 1 réplica
+  template:
+    spec:
+      containers:
+      - name: backend
+        resources:
+          requests:
+            memory: "128Mi"  # DEV: recursos mínimos
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "125m"

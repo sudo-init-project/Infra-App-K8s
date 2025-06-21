@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace destino para dev
+namespace: proyecto-cloud-dev
+
+# Referencia a los manifiestos base
+resources:
+  - ../../base
+
+# Configuración específica para dev
+namePrefix: dev-
+nameSuffix: -dev
+
+# Patches específicos para dev (menos recursos)
+patches:
+  - path: deployment_patch.yaml
+
+# Imágenes específicas para dev
+images:
+  - name: facundo676/backend-shop
+    newTag: latest
+  - name: facundo676/frontend-shop
+    newTag: latest
