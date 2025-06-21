@@ -1,0 +1,29 @@
+# Variables de entorno (contienen credenciales)
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+
+# Archivos temporales
+*.tmp
+*.temp
+/temp/
+
+# Logs
+*.log
+logs/
+
+# Archivos de configuración local
+config.local.yaml
+secrets.local.yaml
+
+# Directorios de IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db

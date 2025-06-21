@@ -9,7 +9,7 @@ ENVIRONMENT=${1:-staging}
 CPUS=${2:-4}
 MEMORY=${3:-8192}
 
-# Variables de entorno por defecto (pueden ser sobrescritas)
+# Variables de entorno por defecto
 export MYSQL_USER="${MYSQL_USER:-appuser}"
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:-devpass123}"
 export MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-rootpass123}"
@@ -17,6 +17,12 @@ export JWT_SECRET="${JWT_SECRET:-GjPEfbM33noYJdEX4fymEken7svn6l81Xtnj9sX7Y7E=}"
 
 # Variable para controlar el método de despliegue
 ARGOCD_DEPLOYED=false
+
+# Cargar variables desde .env si existe
+if [ -f ".env" ]; then
+  echo "🔐 Cargando variables desde .env"
+  source .env
+fi
 
 clear
 echo "🚀 ============================================"
@@ -170,17 +176,25 @@ echo "🔐 Aplicando secrets para ambiente $ENVIRONMENT..."
 # Crear el namespace primero si no existe
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-# Crear un archivo temporal de secrets con el namespace correcto
+# Verificar que las variables estén definidas
+if [ -z "$MYSQL_USER" ] || [ -z "$MYSQL_PASSWORD" ] || [ -z "$MYSQL_ROOT_PASSWORD" ] || [ -z "$JWT_SECRET" ]; then
+    echo "❌ Error: Variables de entorno no definidas"
+    echo "🔧 Solución: Crear archivo .env o exportar variables"
+    echo "📋 Variables necesarias: MYSQL_USER, MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, JWT_SECRET"
+    exit 1
+fi
+
+# Crear archivo temporal de secrets con namespace correcto
 TEMP_SECRETS=$(mktemp)
 cat base/secrets.yaml | sed "s/namespace: proyecto-cloud/namespace: $NAMESPACE/g" > "$TEMP_SECRETS"
 
-# Aplicar secrets usando envsubst
+# Aplicar secrets usando envsubst para reemplazar variables
 envsubst < "$TEMP_SECRETS" | kubectl apply -f -
 
 # Limpiar archivo temporal
 rm "$TEMP_SECRETS"
 
-echo "✅ Secrets aplicados en namespace $NAMESPACE"
+echo "✅ Secrets aplicados usando variables de entorno (sin credenciales hardcodeadas)"
 echo ""
 
 #########################################

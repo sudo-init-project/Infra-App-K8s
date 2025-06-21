@@ -30,6 +30,9 @@ spec:
     spec:
       containers:
       - name: backend
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:mysql://staging-mysql-service-stg:3306/dbejercicio2final
         resources:
           requests:
             memory: "256Mi"  # STAGING: menos recursos
