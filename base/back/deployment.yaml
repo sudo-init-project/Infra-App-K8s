@@ -20,7 +20,7 @@ spec:
         - containerPort: 8080
         env:
         - name: SPRING_DATASOURCE_URL
-          value: jdbc:mysql://mysql-service:3306/dbejercicio2final
+          value: jdbc:mysql://staging-mysql-service-stg:3306/dbejercicio2final
         - name: SPRING_DATASOURCE_USERNAME
           valueFrom:
             secretKeyRef:
