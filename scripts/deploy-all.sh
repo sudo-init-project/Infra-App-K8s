@@ -116,9 +116,17 @@ echo "🔐 Aplicando secrets para ambiente $ENVIRONMENT..."
 # Crear el namespace primero si no existe
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
+# Crear un archivo temporal de secrets con el namespace correcto
+TEMP_SECRETS=$(mktemp)
+cat base/secrets.yaml | sed "s/namespace: proyecto-cloud/namespace: $NAMESPACE/g" > "$TEMP_SECRETS"
+
 # Aplicar secrets usando envsubst
-envsubst < base/secrets.yaml | kubectl apply -f -
-echo "✅ Secrets aplicados"
+envsubst < "$TEMP_SECRETS" | kubectl apply -f -
+
+# Limpiar archivo temporal
+rm "$TEMP_SECRETS"
+
+echo "✅ Secrets aplicados en namespace $NAMESPACE"
 echo ""
 
 #########################################
@@ -126,11 +134,20 @@ echo ""
 #########################################
 echo "🚀 Desplegando aplicación en ambiente $ENVIRONMENT usando Kustomize..."
 
+# Verificar que exista el overlay del ambiente
+if [ ! -d "overlays/$ENVIRONMENT" ]; then
+  echo "❌ No existe el directorio overlays/$ENVIRONMENT"
+  echo "📂 Directorios disponibles:"
+  ls -la overlays/
+  exit 1
+fi
+
 # Aplicar la configuración base + overlay del ambiente
+echo "📝 Aplicando kustomization desde overlays/$ENVIRONMENT"
 kubectl apply -k overlays/$ENVIRONMENT
 
-echo "⏳ Esperando a que la aplicación esté lista..."
-kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout=300s
+echo "⏳ Esperando a que los deployments estén listos..."
+kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout=300s || echo "⚠️ Algunos deployments tardaron más de lo esperado"
 
 #########################################
 # Obtener información de acceso
