@@ -1,25 +1,19 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Namespace destino para staging
 namespace: proyecto-cloud-staging
 
-# Referencia a los manifiestos base
 resources:
   - ../../base
-  # Sealed Secrets específicos para staging (se generarán con el script)
-  - mysql-sealed-secret.yaml
-  - app-sealed-secret.yaml
+  - nginx-configmap.yaml
 
-# Configuración específica para staging
 namePrefix: staging-
 nameSuffix: -stg
 
-# Patches específicos para staging
 patches:
   - path: deployment_patch.yaml
+  - path: frontend-deployment-patch.yaml
 
-# Imágenes específicas para staging
 images:
   - name: facundo676/backend-shop
     newTag: latest

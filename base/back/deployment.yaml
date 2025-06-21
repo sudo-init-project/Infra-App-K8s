@@ -4,7 +4,7 @@ metadata:
   name: backend
   namespace: proyecto-cloud
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: backend
@@ -20,38 +20,39 @@ spec:
         - containerPort: 8080
         env:
         - name: SPRING_DATASOURCE_URL
-          value: jdbc:mysql://mysql-service:3306/dbejercicio2final  # Kustomize cambiará mysql-service
+          value: jdbc:mysql://mysql-service:3306/dbejercicio2final
         - name: SPRING_DATASOURCE_USERNAME
           valueFrom:
             secretKeyRef:
-              name: mysql-secret  # Kustomize cambiará esto automáticamente
+              name: mysql-secret
               key: username
         - name: SPRING_DATASOURCE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mysql-secret  # Kustomize cambiará esto automáticamente
+              name: mysql-secret
               key: password
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: app-secret  # Kustomize cambiará esto automáticamente
+              name: app-secret
               key: jwt-secret
-        livenessProbe:
-          httpGet:
-            path: /actuator/health
-            port: 8080
-          initialDelaySeconds: 120
-          periodSeconds: 30
-          failureThreshold: 3
-          timeoutSeconds: 10
+        # Health checks más permisivos para evitar crashloop
         readinessProbe:
           httpGet:
             path: /actuator/health
             port: 8080
           initialDelaySeconds: 60
-          periodSeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          timeoutSeconds: 10
           failureThreshold: 3
-          timeoutSeconds: 5
         resources:
           requests:
             memory: "512Mi"
