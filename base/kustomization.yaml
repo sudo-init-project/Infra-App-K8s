@@ -5,10 +5,7 @@ namespace: proyecto-cloud
 
 resources:
   - namespace.yaml
-  # NO incluir secrets - se crean directamente por el script
-  # - secrets.yaml
-  # - mysql-sealed-secret.yaml
-  # - app-sealed-secret.yaml
+  # NO incluir secrets en base - cada ambiente tendrá sus propios Sealed Secrets
   
   - db/configmap.yaml
   - db/statefulset.yaml
