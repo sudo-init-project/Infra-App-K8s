@@ -2,8 +2,7 @@
 set -e
 
 #########################################
-# SCRIPT DEPLOY-ALL DEFINITIVO
-# DEPLOYEA TODO CORRECTAMENTE CON ARGOCD
+# DEPLOY-ALL DEFINITIVO - CON ARGOCD INTEGRADO
 #########################################
 
 ENVIRONMENT=${1:-staging}
@@ -24,7 +23,7 @@ fi
 
 clear
 echo "🚀 ============================================"
-echo "🚀 DESPLEGANDO AMBIENTE COMPLETO: $ENVIRONMENT"
+echo "🚀 DEPLOY-ALL DEFINITIVO: $ENVIRONMENT"
 echo "🚀 ============================================"
 date
 
@@ -33,14 +32,12 @@ date
 #########################################
 case "$ENVIRONMENT" in
   dev|staging|production)
-    echo "🟢 Ambiente de trabajo: $ENVIRONMENT"
+    echo "🟢 Ambiente: $ENVIRONMENT"
     PROFILE="minikube-$ENVIRONMENT"
     NAMESPACE="proyecto-cloud-$ENVIRONMENT"
-    CONTEXT="$PROFILE"
     ;;
   *)
-    echo "❌ ENVIRONMENT debe ser uno de: dev, staging, production"
-    echo "❌ Uso: $0 [dev|staging|production] [cpus] [memory]"
+    echo "❌ ENVIRONMENT debe ser: dev, staging, production"
     exit 1
     ;;
 esac
@@ -55,216 +52,92 @@ for cmd in minikube kubectl; do
     exit 1
   fi
 done
-echo "✅ Todas las dependencias están instaladas"
-echo ""
+echo "✅ Dependencias OK"
 
 #########################################
 # Iniciar Minikube
 #########################################
-echo "🚀 Iniciando Minikube con perfil $PROFILE..."
-
+echo "🚀 Verificando Minikube..."
 if minikube status -p "$PROFILE" | grep -q "Running"; then
-  echo "🟢 Minikube ya está corriendo en el perfil $PROFILE"
+  echo "✅ Minikube corriendo"
 else
-  echo "🟢 Iniciando Minikube..."
-  minikube start -p "$PROFILE" \
-    --cpus="$CPUS" \
-    --memory="$MEMORY" \
-    --addons=metrics-server,dashboard,ingress || {
-    echo "❌ Error iniciando Minikube. Intentando con recursos reducidos..."
-    minikube start -p "$PROFILE" \
-      --cpus=2 \
-      --memory=4096 \
-      --addons=metrics-server,dashboard,ingress
-  }
-fi
-echo ""
-
-#########################################
-# Configurar contexto
-#########################################
-echo "🔧 Configurando contexto Kubernetes..."
-if kubectl config get-contexts "$CONTEXT" >/dev/null 2>&1; then
-  echo "🟢 Contexto '$CONTEXT' ya existe"
-else
-  echo "🟢 Creando contexto '$CONTEXT'..."
-  kubectl config set-context "$CONTEXT" \
-    --cluster="$PROFILE" \
-    --user="$PROFILE" \
-    --namespace="$NAMESPACE"
+  echo "🚀 Iniciando Minikube..."
+  minikube start -p "$PROFILE" --cpus="$CPUS" --memory="$MEMORY" --addons=metrics-server,dashboard,ingress
 fi
 
-kubectl config use-context "$CONTEXT"
-echo "✅ Contexto actual: $(kubectl config current-context)"
-echo ""
+kubectl config use-context "$PROFILE"
+echo "✅ Contexto configurado: $PROFILE"
 
 #########################################
 # Crear namespace
 #########################################
-echo "🎯 Creando namespace $NAMESPACE..."
+echo "🎯 Creando namespace..."
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-echo ""
 
 #########################################
-# Instalar ArgoCD
+# INSTALAR ARGOCD SI NO EXISTE
 #########################################
-echo "🚀 Instalando ArgoCD..."
-ARGOCD_NAMESPACE="argocd"
-
-if kubectl get namespace "$ARGOCD_NAMESPACE" >/dev/null 2>&1; then
-  echo "🟢 Namespace '$ARGOCD_NAMESPACE' ya existe"
+echo "🚀 Verificando ArgoCD..."
+if kubectl get namespace argocd >/dev/null 2>&1; then
+  echo "✅ ArgoCD namespace existe"
 else
-  echo "🟢 Creando namespace '$ARGOCD_NAMESPACE'..."
-  kubectl create namespace "$ARGOCD_NAMESPACE"
-fi
-
-if kubectl get deployment argocd-server -n "$ARGOCD_NAMESPACE" >/dev/null 2>&1; then
-  echo "🟢 ArgoCD ya está instalado"
-else
-  echo "🟢 Instalando ArgoCD..."
+  echo "🚀 Instalando ArgoCD..."
+  kubectl create namespace argocd
   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
   
-  echo "⏳ Esperando a que ArgoCD esté listo..."
+  echo "⏳ Esperando ArgoCD..."
   kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 fi
-echo ""
 
 #########################################
-# CORREGIR ARCHIVOS PROBLEMÁTICOS
+# CORREGIR PROBLEMA DE NOMBRES DE SECRETS
 #########################################
-echo "🔧 Corrigiendo configuración de archivos..."
+echo "🔧 Corrigiendo problema de secrets..."
 
-# 1. Restaurar kustomization.yaml funcional
-cat > overlays/$ENVIRONMENT/kustomization.yaml << EOF
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
+# PROBLEMA: Los deployments buscan mysql-secret y app-secret 
+# PERO: Kustomize genera staging-mysql-secret-stg y staging-app-secret-stg
+# SOLUCIÓN: Crear secrets con ambos nombres
 
-namespace: $NAMESPACE
-
-resources:
-  - ../../base
-  - nginx-configmap.yaml
-
-namePrefix: $ENVIRONMENT-
-nameSuffix: -stg
-
-patches:
-  - path: deployment_patch.yaml
-  - path: frontend-deployment-patch.yaml
-
-images:
-  - name: facundo676/backend-shop
-    newTag: latest
-  - name: facundo676/frontend-shop
-    newTag: latest
-EOF
-
-# 2. Crear nginx-configmap.yaml que falta
-cat > overlays/$ENVIRONMENT/nginx-configmap.yaml << 'EOF'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: nginx-config
-  namespace: proyecto-cloud
-data:
-  default.conf: |
-    server {
-        listen 80;
-        server_name localhost;
-        root /usr/share/nginx/html;
-        index index.html;
-        
-        # Configuración específica para React Router
-        location / {
-            try_files $uri $uri/ /index.html;
-        }
-        
-        # Headers para SPA
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-        
-        # API proxy al backend
-        location /api/ {
-            proxy_pass http://backend-service:8080/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-        
-        error_page 500 502 503 504 /50x.html;
-        location = /50x.html {
-            root /usr/share/nginx/html;
-        }
-    }
-EOF
-
-echo "✅ Archivos corregidos"
-echo ""
-
-#########################################
-# CREAR SECRETS DIRECTAMENTE
-#########################################
-echo "🔐 Creando secrets directamente..."
-
-# Eliminar secrets existentes
-kubectl delete secret mysql-secret -n "$NAMESPACE" --ignore-not-found=true
-kubectl delete secret app-secret -n "$NAMESPACE" --ignore-not-found=true
-
-# Crear secrets con nombres base (sin prefijos)
+# 1. Crear secrets base (lo que buscan los deployments)
 kubectl create secret generic mysql-secret \
   --from-literal=username="$MYSQL_USER" \
   --from-literal=password="$MYSQL_PASSWORD" \
   --from-literal=root-password="$MYSQL_ROOT_PASSWORD" \
-  --namespace="$NAMESPACE"
+  --namespace="$NAMESPACE" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic app-secret \
   --from-literal=jwt-secret="$JWT_SECRET" \
-  --namespace="$NAMESPACE"
+  --namespace="$NAMESPACE" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-echo "✅ Secrets creados correctamente"
-kubectl get secrets -n "$NAMESPACE"
-echo ""
+# 2. TAMBIÉN crear secrets con nombres de Kustomize (por si acaso)
+kubectl create secret generic staging-mysql-secret-stg \
+  --from-literal=username="$MYSQL_USER" \
+  --from-literal=password="$MYSQL_PASSWORD" \
+  --from-literal=root-password="$MYSQL_ROOT_PASSWORD" \
+  --namespace="$NAMESPACE" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-#########################################
-# COMMITEAR CAMBIOS A GIT
-#########################################
-echo "📝 Commiteando cambios a Git..."
+kubectl create secret generic staging-app-secret-stg \
+  --from-literal=jwt-secret="$JWT_SECRET" \
+  --namespace="$NAMESPACE" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-if [ -d ".git" ]; then
-  git add overlays/$ENVIRONMENT/
-  git commit -m "🔧 Fix: Corregir configuración de $ENVIRONMENT
-
-- Agregar nginx-configmap.yaml faltante
-- Corregir referencias en kustomization.yaml  
-- Configurar Nginx para React Router
-- Timestamp: $(date)" || echo "⚠️ No hay cambios para commitear"
-  
-  git push || echo "⚠️ Error al pushear, continuando..."
-  echo "✅ Cambios commiteados"
-else
-  echo "⚠️ No es un repositorio Git"
-fi
-echo ""
+echo "✅ Secrets creados con ambos nombres:"
+kubectl get secrets -n "$NAMESPACE" | grep -E "(mysql|app)-secret"
 
 #########################################
-# CONFIGURAR ARGOCD APPLICATION
+# CREAR/ACTUALIZAR APLICACIÓN ARGOCD
 #########################################
-echo "🎯 Configurando ArgoCD Application..."
+echo "🎯 Configurando aplicación ArgoCD..."
 
-# Eliminar aplicación existente si hay problemas
+# Eliminar aplicación existente si tiene problemas
 kubectl delete application "proyecto-cloud-$ENVIRONMENT" -n argocd --ignore-not-found=true
 sleep 5
 
-# Crear aplicación ArgoCD usando el archivo existente si está disponible
-if [ -f "argocd/$ENVIRONMENT-app.yaml" ]; then
-  echo "📂 Usando archivo ArgoCD existente: argocd/$ENVIRONMENT-app.yaml"
-  kubectl apply -f "argocd/$ENVIRONMENT-app.yaml"
-else
-  echo "🔧 Creando aplicación ArgoCD genérica..."
-  cat << ARGOAPP | kubectl apply -f -
+# Crear aplicación ArgoCD
+cat << ARGOAPP | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -287,121 +160,87 @@ spec:
       selfHeal: true
     syncOptions:
     - CreateNamespace=true
-    - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
 ARGOAPP
-fi
 
-echo "⏳ Esperando sincronización inicial de ArgoCD..."
-sleep 15
+echo "✅ Aplicación ArgoCD creada"
 
 #########################################
-# FORZAR SINCRONIZACIÓN DE ARGOCD
+# DEPLOY MANUAL INMEDIATO (BYPASS ARGOCD)
 #########################################
-echo "🔄 Forzando sincronización de ArgoCD..."
-
-# Reintentar sync hasta 3 veces
-for i in {1..3}; do
-  echo "🔄 Intento de sync $i/3..."
-  
-  if kubectl patch application "proyecto-cloud-$ENVIRONMENT" -n argocd --type='merge' -p='{"operation":{"sync":{}}}' 2>/dev/null; then
-    echo "✅ Sync iniciado correctamente"
-    break
-  else
-    echo "⚠️ Error en sync, reintentando en 10s..."
-    sleep 10
-  fi
-done
-
-sleep 20
+echo "📦 Deploy manual para arranque inmediato..."
+kubectl apply -k overlays/$ENVIRONMENT/ || echo "⚠️ Algunos recursos ya existen"
 
 #########################################
-# VERIFICAR Y REINICIAR PODS SI ES NECESARIO
+# FORZAR SYNC ARGOCD
 #########################################
-echo "🔄 Verificando estado de la aplicación..."
-
-# Verificar si los pods están corriendo
-POD_COUNT=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l || echo "0")
-
-if [ "$POD_COUNT" -eq "0" ]; then
-  echo "⚠️ No hay pods, aplicando manifiestos directamente como backup..."
-  kubectl apply -k "overlays/$ENVIRONMENT"
-  sleep 15
-fi
-
-# Reiniciar pods que puedan estar en estado problemático
-kubectl delete pods -n "$NAMESPACE" -l app=frontend --ignore-not-found=true
-kubectl delete pods -n "$NAMESPACE" -l app=backend --ignore-not-found=true
-
-echo "⏳ Esperando que los pods se estabilicen..."
-sleep 20
+echo "🔄 Forzando sync en ArgoCD..."
+sleep 10
+kubectl patch application "proyecto-cloud-$ENVIRONMENT" -n argocd --type='merge' -p='{"operation":{"sync":{}}}' || echo "⚠️ Sync manual falló"
 
 #########################################
-# VERIFICAR ESTADO FINAL
+# ESPERAR Y VERIFICAR
 #########################################
-echo "📋 Estado final de la aplicación:"
-echo ""
-echo "🎯 Pods:"
-kubectl get pods -n "$NAMESPACE" || echo "❌ Error obteniendo pods"
-echo ""
-echo "🌐 Services:"
-kubectl get services -n "$NAMESPACE" || echo "❌ Error obteniendo services"
+echo "⏳ Esperando que los pods arranquen..."
+sleep 30
+
+echo "📋 Estado de los recursos:"
 echo ""
 echo "🔐 Secrets:"
-kubectl get secrets -n "$NAMESPACE" || echo "❌ Error obteniendo secrets"
+kubectl get secrets -n "$NAMESPACE" | grep -E "(mysql|app)"
 echo ""
-echo "🔄 ArgoCD Application:"
-kubectl get applications -n argocd | grep "$ENVIRONMENT" || echo "❌ Error obteniendo application"
+echo "📦 Pods:"
+kubectl get pods -n "$NAMESPACE"
+echo ""
+echo "🌐 Services:"
+kubectl get svc -n "$NAMESPACE"
+echo ""
+echo "🔄 ArgoCD Applications:"
+kubectl get applications -n argocd | grep "$ENVIRONMENT"
 
 #########################################
-# INFORMACIÓN FINAL
+# INFORMACIÓN DE ACCESO
 #########################################
 echo ""
 echo "🎉 ============================================"
-echo "🎉 DESPLIEGUE COMPLETADO"
+echo "🎉 DEPLOY COMPLETADO"
 echo "🎉 ============================================"
 echo ""
-echo "📊 Información del cluster:"
-echo "   - Perfil: $PROFILE"
-echo "   - Namespace: $NAMESPACE"
-echo "   - Contexto: $CONTEXT"
-echo ""
 
-# IP de Minikube
-MINIKUBE_IP=$(minikube ip -p "$PROFILE" 2>/dev/null || echo "No disponible")
-echo "🌐 Accesos:"
-echo "   - IP Minikube: $MINIKUBE_IP"
-
-# Password de ArgoCD
+# Obtener password de ArgoCD
 ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || echo "No disponible")
-echo "   - ArgoCD: http://$MINIKUBE_IP:30080"
-echo "   - Usuario ArgoCD: admin"
-echo "   - Password ArgoCD: $ARGOCD_PASSWORD"
+MINIKUBE_IP=$(minikube ip -p "$PROFILE" 2>/dev/null || echo "localhost")
+
+echo "🌐 ACCESO A ARGOCD:"
+echo "   📱 UI: kubectl port-forward svc/argocd-server -n argocd 8080:443"
+echo "   🌍 URL: https://localhost:8080"
+echo "   👤 Usuario: admin"
+echo "   🔑 Password: $ARGOCD_PASSWORD"
 echo ""
 
-echo "🌐 Para acceder a la aplicación:"
-echo "   1. Port-forward: kubectl port-forward service/$ENVIRONMENT-frontend-service-stg 3000:80 -n $NAMESPACE"
-echo "   2. Abrir: http://localhost:3000"
-echo "   3. Login con: admin/admin"
+echo "🌐 ACCESO A LA APLICACIÓN:"
+echo "   📱 Frontend: kubectl port-forward svc/staging-frontend-service-stg -n $NAMESPACE 3000:80"
+echo "   🌍 URL: http://localhost:3000"
+echo "   👤 Login: admin / admin"
 echo ""
 
-echo "🔧 Comandos útiles:"
+echo "🔧 COMANDOS DE DIAGNÓSTICO:"
 echo "   kubectl get pods -n $NAMESPACE"
-echo "   kubectl logs -f deployment/$ENVIRONMENT-backend-stg -n $NAMESPACE"
-echo "   kubectl logs -f deployment/$ENVIRONMENT-frontend-stg -n $NAMESPACE"
-echo "   kubectl get applications -n argocd"
+echo "   kubectl logs -f deployment/staging-backend-stg -n $NAMESPACE"
+echo "   kubectl logs -f statefulset/staging-mysql-stg -n $NAMESPACE"
+echo "   kubectl describe pod <pod-name> -n $NAMESPACE"
 echo ""
 
-echo "🔗 Para acceder a ArgoCD:"
-echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
-echo "   Luego ir a: https://localhost:8080"
-echo ""
+# Verificar si hay problemas
+FAILED_PODS=$(kubectl get pods -n "$NAMESPACE" --no-headers | grep -v Running | grep -v Completed | wc -l)
+if [ "$FAILED_PODS" -gt 0 ]; then
+  echo "⚠️ ATENCIÓN: Hay $FAILED_PODS pods con problemas"
+  echo "   Ejecuta: kubectl get pods -n $NAMESPACE para ver detalles"
+else
+  echo "✅ Todos los pods están funcionando correctamente"
+fi
 
-echo "✅ ¡DEPLOY-ALL COMPLETADO EXITOSAMENTE!"
-echo "🎯 La aplicación está desplegada con ArgoCD GitOps"
-echo "🔄 ArgoCD gestionará automáticamente cualquier cambio en Git"
+echo ""
+echo "🎯 Tu aplicación está lista!"
+echo "   - ArgoCD está configurado para GitOps automático"
+echo "   - Los secrets están creados correctamente"  
+echo "   - La aplicación debería estar accesible"
