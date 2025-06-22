@@ -7,7 +7,7 @@ set -e
 
 ENVIRONMENT=${1:-staging}
 CPUS=${2:-4}
-MEMORY=${3:-8192}
+MEMORY=${3:-4092}
 
 # Variables de entorno por defecto
 export MYSQL_USER="${MYSQL_USER:-appuser}"
