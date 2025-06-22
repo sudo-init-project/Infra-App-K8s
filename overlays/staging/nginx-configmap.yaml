@@ -15,35 +15,27 @@ data:
             try_files $uri $uri/ /index.html;
         }
         
-        # Interceptar CUALQUIER call que vaya a :8080
-        location ~ ^/(auth|usuarios|productos|api)/ {
-            proxy_pass http://staging-backend-service-stg:8080;
+        # Proxy para auth con CORS
+        location /auth/ {
+            proxy_pass http://staging-backend-service-stg:8080/auth/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             
-            # CORS
-            add_header 'Access-Control-Allow-Origin' '*' always;
+            # CORS para cross-origin requests
+            add_header 'Access-Control-Allow-Origin' 'http://localhost:8084' always;
             add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
             add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
-        }
-    }
-    
-    # SERVIDOR ADICIONAL en puerto 8080 para interceptar requests directas
-    server {
-        listen 8080;
-        server_name localhost;
-        
-        location / {
-            proxy_pass http://staging-backend-service-stg:8080;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
             
-            add_header 'Access-Control-Allow-Origin' '*' always;
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
-            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
+            if ($request_method = 'OPTIONS') {
+                add_header 'Access-Control-Allow-Origin' 'http://localhost:8084';
+                add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
+                add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type';
+                add_header 'Content-Length' 0;
+                add_header 'Content-Type' 'text/plain charset=UTF-8';
+                return 204;
+            }
         }
     }
