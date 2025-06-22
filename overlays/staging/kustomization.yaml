@@ -5,6 +5,7 @@ namespace: proyecto-cloud-staging
 
 resources:
   - ../../base
+  - nginx-configmap.yaml
 
 namePrefix: staging-
 nameSuffix: -stg
