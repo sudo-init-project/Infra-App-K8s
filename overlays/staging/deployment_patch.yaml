@@ -9,6 +9,9 @@ spec:
     spec:
       containers:
       - name: frontend
+        env:
+        - name: BACKEND_HOST
+          value: "staging-backend-service-stg"
         resources:
           requests:
             memory: "128Mi"
