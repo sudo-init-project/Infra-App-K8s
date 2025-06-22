@@ -15,19 +15,35 @@ data:
             try_files $uri $uri/ /index.html;
         }
         
-        location /api/ {
-            proxy_pass http://staging-backend-service-stg:8080/;
+        # Interceptar CUALQUIER call que vaya a :8080
+        location ~ ^/(auth|usuarios|productos|api)/ {
+            proxy_pass http://staging-backend-service-stg:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # CORS
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
         }
+    }
+    
+    # SERVIDOR ADICIONAL en puerto 8080 para interceptar requests directas
+    server {
+        listen 8080;
+        server_name localhost;
         
-        location /auth/ {
-            proxy_pass http://staging-backend-service-stg:8080/auth/;
+        location / {
+            proxy_pass http://staging-backend-service-stg:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
         }
     }
