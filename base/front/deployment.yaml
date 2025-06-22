@@ -1,27 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
-  namespace: proyecto-cloud
+ name: frontend
+ namespace: proyecto-cloud
 spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: frontend
-  template:
-    metadata:
-      labels:
-        app: frontend
-    spec:
-      containers:
-      - name: frontend
-        image: facundo676/frontend-shop:latest
-        ports:
-        - containerPort: 80
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "125m"
-          limits:
-            memory: "512Mi"
-            cpu: "250m"
+ replicas: 3
+ selector:
+   matchLabels:
+     app: frontend
+ template:
+   metadata:
+     labels:
+       app: frontend
+   spec:
+     containers:
+     - name: frontend
+       image: facundo676/frontend-shop:latest
+       ports:
+       - containerPort: 80
+       resources:
+         requests:
+           memory: "256Mi"
+           cpu: "125m"
+         limits:
+           memory: "512Mi"
+           cpu: "250m"
+       readinessProbe:
+         httpGet:
+           path: /
+           port: 80
+         initialDelaySeconds: 5
+         periodSeconds: 10
