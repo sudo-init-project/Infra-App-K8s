@@ -12,6 +12,8 @@ spec:
        env:
        - name: BACKEND_HOST
          value: "staging-backend-service-stg"
+       - name: REACT_APP_API_URL
+         value: "/api"
        resources:
          requests:
            memory: "128Mi"
