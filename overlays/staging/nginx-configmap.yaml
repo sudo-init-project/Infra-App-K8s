@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nginx-config
-  namespace: proyecto-cloud
+  namespace: proyecto-cloud-staging
 data:
   default.conf: |
     server {
