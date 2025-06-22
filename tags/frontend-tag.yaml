@@ -6,4 +6,4 @@ resources:
 
 images:
   - name: facundo676/frontend-shop
-    newTag: 20250622-185628-1da252f
+    newTag: 20250622-202530-3150ddc
