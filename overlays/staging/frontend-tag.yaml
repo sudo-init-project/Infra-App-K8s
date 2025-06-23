@@ -1,6 +1,3 @@
-# FRONTEND VERSION - STAGING
-# Cambiar image tag para actualizar versión
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,4 +8,4 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: facundo676/frontend-shop:stg-v1
+        image: facundo676/frontend-shop:stg-v2

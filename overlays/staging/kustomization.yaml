@@ -12,5 +12,7 @@ nameSuffix: -stg
 
 patches:
   - path: deployment_patch.yaml
-  - path: frontend-tag.yaml
-  - path: backend-tag.yaml
+
+patchesStrategicMerge:
+  - frontend-tag.yaml
+  - backend-tag.yaml

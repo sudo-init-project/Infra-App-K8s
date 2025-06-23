@@ -3,8 +3,5 @@ kind: Component
 
 images:
   - name: facundo676/backend-shop
-<<<<<<< HEAD:tags/backend-tag.yaml
     newTag: 20250623-003721-f7ab571
-=======
     newTag: stg-v1
-4dd6565 (Avances ahora implementamos versionado y el script tendria que funcionar pero no quiero que ponga las versiones en automatico):overlays/dev/backend-tag.yaml

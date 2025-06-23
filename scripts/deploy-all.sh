@@ -62,22 +62,63 @@ log() {
   echo "$(date '+%H:%M:%S') $1"
 }
 
-# Obtener tag actual del archivo
+# Obtener tag actual del archivo Strategic Merge
 get_file_tag() {
   local service=$1
   local tag_file="overlays/$ENVIRONMENT/${service}-tag.yaml"
 
   if [ -f "$tag_file" ]; then
-    grep "image:" "$tag_file" | awk -F: '{print $3}' || echo "none"
+    grep "image:" "$tag_file" | cut -d: -f3 || echo "none"
   else
     echo "none"
   fi
+}
+
+# Función para actualizar Strategic Merge patch
+update_tag_file() {
+  local service=$1
+  local tag=$2
+  local tag_file="overlays/$ENVIRONMENT/${service}-tag.yaml"
+
+  if [ "$service" = "frontend" ]; then
+    local repo="$FRONTEND_REPO"
+  else
+    local repo="$BACKEND_REPO"
+  fi
+
+  cat > "$tag_file" << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: $service
+  namespace: proyecto-cloud
+spec:
+  template:
+    spec:
+      containers:
+      - name: $service
+        image: $repo:$tag
+EOF
+
+  log "📝 Actualizado $tag_file con tag: $tag"
+}
+
+# Obtener tag del deployment actual
+get_deployment_tag() {
+  local service=$1
+  kubectl get deployment "${ENVIRONMENT}-${service}-${ENVIRONMENT:0:3}" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | cut -d: -f2 || echo "none"
 }
 
 # Verificar si imagen existe en Docker Hub
 image_exists_remote() {
   local image=$1
   docker manifest inspect "$image" >/dev/null 2>&1
+}
+
+# Verificar si imagen existe localmente
+image_exists_local() {
+  local image=$1
+  docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$image$"
 }
 
 # Verificar si hay cambios en código
@@ -119,8 +160,8 @@ generate_next_tag() {
   fi
 }
 
-# Build imagen si es necesario
-build_service() {
+# Función principal de comparación y build
+compare_and_build() {
   local service=$1
   local directory=$2
   local repo=$3
@@ -132,92 +173,93 @@ build_service() {
     return 1
   fi
 
-  # Obtener tag actual del archivo
-  local current_tag=$(get_file_tag "$service")
+  # Obtener tags
+  local file_tag=$(get_file_tag "$service")
+  local deployment_tag=$(get_deployment_tag "$service")
 
-  if [ "$current_tag" = "none" ]; then
-    # No hay tag, generar inicial
-    current_tag="${ENVIRONMENT:0:3}-v1"
-    log "🔨 Generando tag inicial: $current_tag"
+  if [ "$file_tag" = "none" ]; then
+    # No hay tag en archivo, generar inicial
+    file_tag="${ENVIRONMENT:0:3}-v1"
+    log "🔨 Generando tag inicial: $file_tag"
     build_needed=true
+  elif [ "$deployment_tag" = "none" ]; then
+    # No hay deployment, usar tag del archivo
+    log "🔨 No hay deployment, usando tag: $file_tag"
+    build_needed=true
+  elif [ "$file_tag" = "$deployment_tag" ]; then
+    # Tags son iguales, verificar cambios en código
+    log "📋 Tags iguales (archivo: $file_tag, deployment: $deployment_tag)"
+
+    if has_code_changes "$directory"; then
+      log "🔨 Cambios detectados en código, generando nueva versión"
+      file_tag=$(generate_next_tag "$file_tag")
+      build_needed=true
+    else
+      log "✅ Sin cambios en código, saltando build"
+      build_needed=false
+      echo "$file_tag"
+      return 0
+    fi
   else
-    log "📋 Tag actual: $current_tag"
+    # Tags diferentes, usar el del archivo
+    log "🔄 Tags diferentes (archivo: $file_tag, deployment: $deployment_tag)"
+    log "🔨 Usando tag del archivo: $file_tag"
 
-    # Verificar si imagen existe
-    if image_exists_remote "$repo:$current_tag"; then
-      log "✅ Imagen $repo:$current_tag existe en Docker Hub"
-
-      # Verificar si hay cambios en código
-      if has_code_changes "$directory"; then
-        log "🔨 Cambios detectados en código, generando nueva versión"
-        current_tag=$(generate_next_tag "$current_tag")
-        build_needed=true
-      else
-        log "✅ Sin cambios en código, usando imagen existente"
+    # Verificar si existe localmente
+    if image_exists_local "$repo:$file_tag"; then
+      log "✅ Imagen $repo:$file_tag existe localmente, no construyendo"
+      build_needed=false
+    # Verificar si existe remotamente
+    elif image_exists_remote "$repo:$file_tag"; then
+      log "📥 Imagen $repo:$file_tag existe remotamente, haciendo pull..."
+      if docker pull "$repo:$file_tag" >/dev/null 2>&1; then
+        log "✅ Pull completado, no construyendo"
         build_needed=false
+      else
+        log "❌ Error en pull, construyendo..."
+        build_needed=true
       fi
     else
-      log "❌ Imagen $repo:$current_tag NO existe, construyendo..."
+      log "❌ Imagen $repo:$file_tag NO existe, construyendo..."
       build_needed=true
     fi
   fi
 
-  # Construir si es necesario
+  # Construir solo si es necesario
   if [ "$build_needed" = "true" ]; then
-    log "📦 Construyendo $service:$current_tag..."
+    log "📦 Construyendo $service:$file_tag..."
 
     cd "$directory"
 
     # Build imagen
-    if docker build --no-cache -t "$repo:$current_tag" . >/dev/null 2>&1; then
-      log "📤 Subiendo $repo:$current_tag..."
+    if docker build --no-cache -t "$repo:$file_tag" . >/dev/null 2>&1; then
+      log "📤 Subiendo $repo:$file_tag..."
 
-      if docker push "$repo:$current_tag" >/dev/null 2>&1; then
+      if docker push "$repo:$file_tag" >/dev/null 2>&1; then
         mark_build_complete "."
-        log "✅ $service listo: $current_tag"
+        log "✅ Build completado: $file_tag"
 
-        # Limpiar imágenes locales viejas
-        docker images "$repo" --format "{{.Repository}}:{{.Tag}}" | grep -v ":$current_tag" | head -n -1 | xargs -r docker rmi -f >/dev/null 2>&1 || true
+        # Actualizar archivo de tag
+        cd - >/dev/null
+        update_tag_file "$service" "$file_tag"
 
+        echo "$file_tag"
+        return 0
       else
-        log "❌ Error al subir $service"
+        log "❌ Error subiendo imagen"
+        cd - >/dev/null
         return 1
       fi
     else
-      log "❌ Error al construir $service"
+      log "❌ Error construyendo imagen"
+      cd - >/dev/null
       return 1
     fi
-
-    cd - >/dev/null
+  else
+    log "⏭️ Saltando build para $service"
+    echo "$file_tag"
+    return 0
   fi
-
-  # Actualizar archivo de tag
-  update_tag_file "$service" "$current_tag"
-  echo "$current_tag"
-}
-
-# Actualizar archivo de tag
-update_tag_file() {
-  local service=$1
-  local tag=$2
-  local tag_file="overlays/$ENVIRONMENT/${service}-tag.yaml"
-
-  cat > "$tag_file" << EOF
-# ${service^^} VERSION - ${ENVIRONMENT^^}
-# Cambiar image tag para actualizar versión
-
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: $service
-  namespace: proyecto-cloud
-spec:
-  template:
-    spec:
-      containers:
-      - name: $service
-        image: $DOCKER_USER/${service}-shop:$tag
-EOF
 }
 
 #########################################
@@ -244,8 +286,8 @@ log "🔍 VERIFICANDO Y CONSTRUYENDO IMÁGENES"
 log "🔍 ============================================"
 
 # Build servicios
-FRONTEND_TAG=$(build_service "frontend" "$FRONTEND_DIR" "$FRONTEND_REPO")
-BACKEND_TAG=$(build_service "backend" "$BACKEND_DIR" "$BACKEND_REPO")
+FRONTEND_TAG=$(compare_and_build "frontend" "$FRONTEND_DIR" "$FRONTEND_REPO")
+BACKEND_TAG=$(compare_and_build "backend" "$BACKEND_DIR" "$BACKEND_REPO")
 
 if [ -z "$FRONTEND_TAG" ] || [ -z "$BACKEND_TAG" ]; then
   log "❌ Error en construcción de imágenes"
@@ -337,19 +379,43 @@ kubectl apply -k "overlays/$ENVIRONMENT/" 2>&1 | grep -v "Warning.*deprecated" |
 
 log "✅ Deploy aplicado"
 
-# Forzar restart si se actualizaron las imágenes
-log "🔄 Forzando actualización de pods..."
-kubectl rollout restart deployment/staging-frontend-stg deployment/staging-backend-stg -n "$NAMESPACE" >/dev/null 2>&1
+#########################################
+# ESPERAR PODS
+#########################################
+log "⏳ Esperando que los pods estén listos..."
 
-log "⏳ Esperando pods..."
-sleep 30
+# Esperar deployments con timeout
+log "🔄 Esperando frontend..."
+if kubectl rollout status deployment/${ENVIRONMENT}-frontend-${ENVIRONMENT:0:3} -n "$NAMESPACE" --timeout=180s 2>/dev/null; then
+  log "✅ Frontend listo"
+else
+  log "⚠️ Frontend tardó mucho, continuando..."
+fi
+
+log "🔄 Esperando backend..."
+if kubectl rollout status deployment/${ENVIRONMENT}-backend-${ENVIRONMENT:0:3} -n "$NAMESPACE" --timeout=180s 2>/dev/null; then
+  log "✅ Backend listo"
+else
+  log "⚠️ Backend tardó mucho, continuando..."
+fi
+
+log "🔄 Esperando MySQL..."
+if kubectl rollout status statefulset/${ENVIRONMENT}-mysql-${ENVIRONMENT:0:3} -n "$NAMESPACE" --timeout=120s 2>/dev/null; then
+  log "✅ MySQL listo"
+else
+  log "⚠️ MySQL tardó mucho, continuando..."
+fi
 
 #########################################
 # ESTADO FINAL
 #########################################
 log ""
 log "📋 Estado de pods:"
-kubectl get pods -n "$NAMESPACE"
+kubectl get pods -n "$NAMESPACE" 2>/dev/null || log "❌ Error obteniendo pods"
+
+log ""
+log "📋 Estado de servicios:"
+kubectl get svc -n "$NAMESPACE" 2>/dev/null || log "❌ Error obteniendo servicios"
 
 echo ""
 echo "🎉 ¡DEPLOY COMPLETADO!"
@@ -369,8 +435,12 @@ echo "   👤 Usuario: admin"
 echo "   🔑 Password: $ARGOCD_PASSWORD"
 echo ""
 echo "🌐 ACCESO A LA APLICACIÓN:"
-echo "   📱 Frontend: kubectl port-forward svc/staging-frontend-service-stg -n $NAMESPACE 3000:80"
+echo "   📱 Frontend: kubectl port-forward svc/${ENVIRONMENT}-frontend-service-${ENVIRONMENT:0:3} -n $NAMESPACE 3000:80"
 echo "   🌍 URL: http://localhost:3000"
 echo "   👤 Login: admin / admin"
 echo ""
 echo "🎯 GitOps configurado - ArgoCD sincroniza automáticamente"
+echo ""
+echo "💡 Para verificar el estado:"
+echo "   kubectl get pods -n $NAMESPACE"
+echo "   kubectl logs -f deployment/${ENVIRONMENT}-backend-${ENVIRONMENT:0:3} -n $NAMESPACE"
