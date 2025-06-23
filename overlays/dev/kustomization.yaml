@@ -9,10 +9,6 @@ resources:
   - ../../base
   - nginx-configmap.yaml
 
-components:
-  - frontend-tag.yaml
-  - backend-tag.yaml
-
 # Configuración específica para dev
 namePrefix: dev-
 nameSuffix: -dev

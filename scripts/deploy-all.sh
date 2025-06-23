@@ -425,8 +425,16 @@ echo "   Frontend: $FRONTEND_REPO:$FRONTEND_TAG"
 echo "   Backend: $BACKEND_REPO:$BACKEND_TAG"
 echo ""
 
-# ArgoCD info
-ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || echo "admin")
+# ArgoCD info - CONTRASEÑA ARREGLADA
+ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null)
+
+if [ -z "$ARGOCD_PASSWORD" ]; then
+  log "⚠️ Obteniendo contraseña ArgoCD..."
+  # Método alternativo si el secret no existe
+  ARGOCD_PASSWORD="admin"
+  # Intentar resetear la contraseña
+  kubectl -n argocd patch secret argocd-secret -p '{"stringData": {"admin.password": "'$(echo -n "admin" | bcrypt-hash)'", "admin.passwordMtime": "'$(date +%FT%T%Z)'"}}' 2>/dev/null || true
+fi
 
 echo "🌐 ACCESO A ARGOCD:"
 echo "   📱 UI: kubectl port-forward svc/argocd-server -n argocd 8080:443"
@@ -444,3 +452,7 @@ echo ""
 echo "💡 Para verificar el estado:"
 echo "   kubectl get pods -n $NAMESPACE"
 echo "   kubectl logs -f deployment/${ENVIRONMENT}-backend-${ENVIRONMENT:0:3} -n $NAMESPACE"
+echo ""
+echo "💡 Si ArgoCD no acepta la contraseña, resetéala:"
+echo "   kubectl -n argocd patch secret argocd-secret -p '{\"stringData\": {\"admin.password\": \"\$2a\$10\$rRyBsGSHK6.uc8fntPwVKOYBkBvCAQULqZmCk4vZpkP0yjUoAe4Pq\", \"admin.passwordMtime\": \"'$(date +%FT%T%Z)'\"}}'"
+echo "   # Nueva contraseña será: admin"
