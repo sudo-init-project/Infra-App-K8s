@@ -2,14 +2,14 @@
 set -e
 
 #########################################
-# DEPLOY COMPLETO - Build + Tags + ArgoCD
+# ULTIMATE DEPLOYMIUM
 #########################################
 
 ENVIRONMENT=$1
 
-# VALIDAR QUE SE ESPECIFIQUE AMBIENTE
+# Validacion de ambiente
 if [ -z "$ENVIRONMENT" ]; then
-  echo "❌ ERROR: Debes especificar el ambiente"
+  echo "❌ ERROR: Debes especificar el ambiente ahi te pongo unos comandos para que sepas que hacer "
   echo ""
   echo "Uso:"
   echo "  ./deploy-all.sh <ambiente>"
@@ -27,7 +27,6 @@ fi
 echo "DEPLOY COMPLETO: $ENVIRONMENT"
 echo "================================"
 
-# Validar ambiente y configurar perfiles
 case "$ENVIRONMENT" in
   dev)
     PROFILE="minikube-dev"
@@ -56,7 +55,6 @@ export MYSQL_PASSWORD="${MYSQL_PASSWORD:-devpass123}"
 export MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-rootpass123}"
 export JWT_SECRET="${JWT_SECRET:-GjPEfbM33noYJdEX4fymEken7svn6l81Xtnj9sX7Y7E=}"
 
-# Configuración
 DOCKER_USER="facundo676"
 FRONTEND_REPO="$DOCKER_USER/frontend-shop"
 BACKEND_REPO="$DOCKER_USER/backend-shop"
@@ -71,7 +69,7 @@ log() {
   echo "$(date '+%H:%M:%S') $1"
 }
 
-# Obtener tag actual del archivo Strategic Merge
+# Esto obtiene el tag
 get_file_tag() {
   local service=$1
   local tag_file="overlays/$ENVIRONMENT/${service}-tag.yaml"
@@ -83,7 +81,7 @@ get_file_tag() {
   fi
 }
 
-# Función para actualizar Strategic Merge patch
+# Esta funcion actualiza los tags dependiendo de que caiga
 update_tag_file() {
   local service=$1
   local tag=$2
@@ -112,31 +110,31 @@ EOF
   log "📝 Actualizado $tag_file con tag: $tag"
 }
 
-# Obtener tag del deployment actual
+# Esto agarra el tag del deployment actual
 get_deployment_tag() {
   local service=$1
   kubectl get deployment "${ENVIRONMENT}-${service}-${ENVIRONMENT:0:3}" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | cut -d: -f2 || echo "none"
 }
 
-# Verificar si imagen existe en Docker Hub
+# Esto verifica si existe la img en docker hub
 image_exists_remote() {
   local image=$1
   docker manifest inspect "$image" >/dev/null 2>&1
 }
 
-# Verificar si imagen existe localmente
+# Esto verifica si la img local existe
 image_exists_local() {
   local image=$1
   docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$image$"
 }
 
-# Verificar si hay cambios en código
+# Hay cambios en el codigo?
 has_code_changes() {
   local directory=$1
   local hash_file="$directory/.build_hash"
 
   if [ ! -f "$hash_file" ]; then
-    return 0  # No hay hash, asumir cambios
+    return 0  # No hay hash, no hay na mandamos los cambios
   fi
 
   local old_hash=$(cat "$hash_file" 2>/dev/null || echo "")
@@ -145,14 +143,13 @@ has_code_changes() {
   [ "$old_hash" != "$new_hash" ]
 }
 
-# Marcar build completo
+
 mark_build_complete() {
   local directory=$1
   local new_hash=$(find "$directory" -type f \( -name "*.js" -o -name "*.java" -o -name "*.json" -o -name "*.xml" \) -exec md5sum {} \; 2>/dev/null | sort | md5sum | cut -d' ' -f1)
   echo "$new_hash" > "$directory/.build_hash"
 }
 
-# Generar siguiente tag
 generate_next_tag() {
   local current_tag=$1
   local prefix=""
@@ -169,7 +166,6 @@ generate_next_tag() {
   fi
 }
 
-# Función principal de comparación y build
 compare_and_build() {
   local service=$1
   local directory=$2
@@ -182,7 +178,6 @@ compare_and_build() {
     return 1
   fi
 
-  # Obtener tags
   local file_tag=$(get_file_tag "$service")
   local deployment_tag=$(get_deployment_tag "$service")
 
@@ -409,7 +404,6 @@ log "✅ Deploy aplicado"
 #########################################
 log "⏳ Esperando que los pods estén listos..."
 
-# Esperar deployments con timeout
 log "🔄 Esperando frontend..."
 if kubectl rollout status deployment/${ENVIRONMENT}-frontend-${ENVIRONMENT:0:3} -n "$NAMESPACE" --timeout=180s 2>/dev/null; then
   log "✅ Frontend listo"
@@ -450,7 +444,6 @@ echo "   Frontend: $FRONTEND_REPO:$FRONTEND_TAG"
 echo "   Backend: $BACKEND_REPO:$BACKEND_TAG"
 echo ""
 
-# ArgoCD info
 ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null)
 
 if [ -z "$ARGOCD_PASSWORD" ]; then
