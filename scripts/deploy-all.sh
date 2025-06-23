@@ -24,14 +24,22 @@ if [ -z "$ENVIRONMENT" ]; then
   exit 1
 fi
 
-echo "🚀 DEPLOY COMPLETO: $ENVIRONMENT"
+echo "DEPLOY COMPLETO: $ENVIRONMENT"
 echo "================================"
 
-# Validar ambiente
+# Validar ambiente y configurar perfiles
 case "$ENVIRONMENT" in
-  dev|staging|production)
-    PROFILE="minikube-$ENVIRONMENT"
-    NAMESPACE="proyecto-cloud-$ENVIRONMENT"
+  dev)
+    PROFILE="minikube-dev"
+    NAMESPACE="proyecto-cloud-dev"
+    ;;
+  staging)
+    PROFILE="minikube-staging"
+    NAMESPACE="proyecto-cloud-staging"
+    ;;
+  production)
+    PROFILE="minikube-production"
+    NAMESPACE="proyecto-cloud-production"
     ;;
   *)
     echo "❌ Usar: ./deploy-all.sh [dev|staging|production]"
@@ -40,6 +48,7 @@ case "$ENVIRONMENT" in
 esac
 
 echo "🟢 Ambiente: $ENVIRONMENT"
+echo "Perfil Minikube: $PROFILE"
 
 # Variables de entorno
 export MYSQL_USER="${MYSQL_USER:-appuser}"
@@ -166,7 +175,7 @@ compare_and_build() {
   local directory=$2
   local repo=$3
 
-  log "🔍 Verificando $service..."
+  log "Verificando $service..."
 
   if [ ! -d "$directory" ]; then
     log "❌ Directorio no encontrado: $directory"
@@ -202,8 +211,8 @@ compare_and_build() {
     fi
   else
     # Tags diferentes, usar el del archivo
-    log "🔄 Tags diferentes (archivo: $file_tag, deployment: $deployment_tag)"
-    log "🔨 Usando tag del archivo: $file_tag"
+    log "Tags diferentes (archivo: $file_tag, deployment: $deployment_tag)"
+    log "Usando tag del archivo: $file_tag"
 
     # Verificar si existe localmente
     if image_exists_local "$repo:$file_tag"; then
@@ -233,7 +242,7 @@ compare_and_build() {
 
     # Build imagen
     if docker build --no-cache -t "$repo:$file_tag" . >/dev/null 2>&1; then
-      log "📤 Subiendo $repo:$file_tag..."
+      log "Subiendo $repo:$file_tag..."
 
       if docker push "$repo:$file_tag" >/dev/null 2>&1; then
         mark_build_complete "."
@@ -263,19 +272,35 @@ compare_and_build() {
 }
 
 #########################################
-# VERIFICAR MINIKUBE
+# VERIFICAR Y CONFIGURAR MINIKUBE
 #########################################
-log "🚀 Verificando Minikube..."
+log "Verificando y configurando Minikube..."
 
-if ! minikube status -p "$PROFILE" 2>/dev/null | grep -q "Running"; then
-  log "❌ Minikube no está corriendo"
-  log "💡 Ejecuta primero:"
+# Verificar que el perfil existe
+if ! minikube profile list | grep -q "$PROFILE"; then
+  log "❌ Perfil $PROFILE no existe"
+  log "Crealo con:"
   log "   minikube start -p $PROFILE --cpus=4 --memory=4092"
   exit 1
 fi
 
+# Verificar que está corriendo
+if ! minikube status -p "$PROFILE" 2>/dev/null | grep -q "Running"; then
+  log "Minikube $PROFILE no está corriendo"
+  log "Inicia con:"
+  log "   minikube start -p $PROFILE"
+  exit 1
+fi
+
+# Cambiar al perfil correcto
+log "🔄 Cambiando al perfil: $PROFILE"
+minikube profile "$PROFILE" >/dev/null 2>&1
+
+# Configurar kubectl al contexto correcto
 kubectl config use-context "$PROFILE" >/dev/null 2>&1
-log "✅ Minikube OK"
+
+log "✅ Minikube configurado: $PROFILE"
+log "📋 Contexto actual: $(kubectl config current-context)"
 
 #########################################
 # BUILD IMÁGENES
@@ -418,41 +443,35 @@ log "📋 Estado de servicios:"
 kubectl get svc -n "$NAMESPACE" 2>/dev/null || log "❌ Error obteniendo servicios"
 
 echo ""
-echo "🎉 ¡DEPLOY COMPLETADO!"
+echo "🎉 ¡DEPLOY COMPLETADO GIL!"
 echo ""
 echo "📋 Versiones desplegadas:"
 echo "   Frontend: $FRONTEND_REPO:$FRONTEND_TAG"
 echo "   Backend: $BACKEND_REPO:$BACKEND_TAG"
 echo ""
 
-# ArgoCD info - CONTRASEÑA ARREGLADA
+# ArgoCD info
 ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null)
 
 if [ -z "$ARGOCD_PASSWORD" ]; then
-  log "⚠️ Obteniendo contraseña ArgoCD..."
-  # Método alternativo si el secret no existe
   ARGOCD_PASSWORD="admin"
-  # Intentar resetear la contraseña
-  kubectl -n argocd patch secret argocd-secret -p '{"stringData": {"admin.password": "'$(echo -n "admin" | bcrypt-hash)'", "admin.passwordMtime": "'$(date +%FT%T%Z)'"}}' 2>/dev/null || true
 fi
 
 echo "🌐 ACCESO A ARGOCD:"
-echo "   📱 UI: kubectl port-forward svc/argocd-server -n argocd 8080:443"
-echo "   🌍 URL: https://localhost:8080"
-echo "   👤 Usuario: admin"
-echo "   🔑 Password: $ARGOCD_PASSWORD"
+echo "   UI: kubectl port-forward svc/argocd-server -n argocd 8080:443"
+echo "   URL: https://localhost:8080"
+echo "   Usuario: admin"
+echo "   Password: $ARGOCD_PASSWORD"
 echo ""
 echo "🌐 ACCESO A LA APLICACIÓN:"
-echo "   📱 Frontend: kubectl port-forward svc/${ENVIRONMENT}-frontend-service-${ENVIRONMENT:0:3} -n $NAMESPACE 3000:80"
-echo "   🌍 URL: http://localhost:3000"
-echo "   👤 Login: admin / admin"
+echo "   Frontend: kubectl port-forward svc/${ENVIRONMENT}-frontend-service-${ENVIRONMENT:0:3} -n $NAMESPACE 3000:80"
+echo "   URL: http://localhost:3000"
+echo "   Login: admin / admin"
 echo ""
-echo "🎯 GitOps configurado - ArgoCD sincroniza automáticamente"
 echo ""
 echo "💡 Para verificar el estado:"
 echo "   kubectl get pods -n $NAMESPACE"
 echo "   kubectl logs -f deployment/${ENVIRONMENT}-backend-${ENVIRONMENT:0:3} -n $NAMESPACE"
 echo ""
-echo "💡 Si ArgoCD no acepta la contraseña, resetéala:"
-echo "   kubectl -n argocd patch secret argocd-secret -p '{\"stringData\": {\"admin.password\": \"\$2a\$10\$rRyBsGSHK6.uc8fntPwVKOYBkBvCAQULqZmCk4vZpkP0yjUoAe4Pq\", \"admin.passwordMtime\": \"'$(date +%FT%T%Z)'\"}}'"
-echo "   # Nueva contraseña será: admin"
+echo "Cluster activo: $PROFILE"
+echo "Para cambiar manualmente: minikube profile $PROFILE"
