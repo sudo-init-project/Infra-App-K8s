@@ -1,20 +1,55 @@
-# Patches específicos para production
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
-  namespace: proyecto-cloud
+ name: frontend
+ namespace: proyecto-cloud
 spec:
-  replicas: 3  # Más réplicas
-  template:
-    spec:
-      containers:
-      - name: backend
-        resources:
-          requests:
-            memory: "1Gi"  # Más recursos en production porque..produccion igual es obvio 
-            cpu: "500m"
-          limits:
-            memory: "2Gi"
-            cpu: "1000m"
+ replicas: 3
+ template:
+   spec:
+     containers:
+     - name: frontend
+       env:
+       - name: BACKEND_HOST
+         value: "prod-backend-service-prod"
+       - name: REACT_APP_API_URL
+         value: "/api"
+       resources:
+         requests:
+           memory: "256Mi"
+           cpu: "100m"
+         limits:
+           memory: "512Mi"
+           cpu: "250m"
+       volumeMounts:
+       - name: nginx-config
+         mountPath: /etc/nginx/conf.d
+     volumes:
+     - name: nginx-config
+       configMap:
+         name: prod-nginx-config-prod
 
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ name: backend
+ namespace: proyecto-cloud
+spec:
+ replicas: 3
+ template:
+   spec:
+     containers:
+     - name: backend
+       env:
+       - name: SPRING_DATASOURCE_URL
+         value: jdbc:mysql://prod-mysql-service-prod:3306/dbejercicio2final
+       - name: SPRING_PROFILES_ACTIVE
+         value: "production"
+       resources:
+         requests:
+           memory: "1Gi"
+           cpu: "500m"
+         limits:
+           memory: "2Gi"
+           cpu: "1000m"

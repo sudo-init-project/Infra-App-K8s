@@ -1,38 +1,54 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
-  namespace: proyecto-cloud
+ name: frontend
+ namespace: proyecto-cloud
 spec:
-  replicas: 1  # DEV: mínimas réplicas para desarrollo
-  template:
-    spec:
-      containers:
-      - name: frontend
-        resources:
-          requests:
-            memory: "64Mi"  # DEV: recursos mínimos
-            cpu: "25m"
-          limits:
-            memory: "128Mi"
-            cpu: "50m"
-            
+ replicas: 1
+ template:
+   spec:
+     containers:
+     - name: frontend
+       env:
+       - name: BACKEND_HOST
+         value: "dev-backend-service-dev"
+       - name: REACT_APP_API_URL
+         value: "/api"
+       resources:
+         requests:
+           memory: "64Mi"
+           cpu: "25m"
+         limits:
+           memory: "128Mi"
+           cpu: "100m"
+       volumeMounts:
+       - name: nginx-config
+         mountPath: /etc/nginx/conf.d
+     volumes:
+     - name: nginx-config
+       configMap:
+         name: dev-nginx-config-dev
+
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
-  namespace: proyecto-cloud
+ name: backend
+ namespace: proyecto-cloud
 spec:
-  replicas: 1  # DEV: solo 1 réplica
-  template:
-    spec:
-      containers:
-      - name: backend
-        resources:
-          requests:
-            memory: "128Mi"  # DEV: recursos mínimos
-            cpu: "50m"
-          limits:
-            memory: "256Mi"
-            cpu: "125m"
+ template:
+   spec:
+     containers:
+     - name: backend
+       env:
+       - name: SPRING_DATASOURCE_URL
+         value: jdbc:mysql://dev-mysql-service-dev:3306/dbejercicio2final
+       - name: SPRING_PROFILES_ACTIVE
+         value: "dev"
+       resources:
+         requests:
+           memory: "256Mi"
+           cpu: "100m"
+         limits:
+           memory: "512Mi"
+           cpu: "250m"

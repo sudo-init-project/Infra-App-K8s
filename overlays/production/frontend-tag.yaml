@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: facundo676/frontend-shop:dev-v1
+        image: facundo676/frontend-shop:prod-v1

@@ -1,11 +1,11 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: backend
   namespace: proyecto-cloud
 spec:
   template:
     spec:
       containers:
-      - name: frontend
-        image: facundo676/frontend-shop:dev-v1
+      - name: backend
+        image: facundo676/backend-shop:prod-v1

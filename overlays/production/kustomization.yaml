@@ -1,22 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Namespace destino para dev
-namespace: proyecto-cloud-dev
+namespace: proyecto-cloud-production
 
-# Referencia a los manifiestos base
 resources:
   - ../../base
   - nginx-configmap.yaml
 
-components:
-  - frontend-tag.yaml
-  - backend-tag.yaml
+namePrefix: prod-
+nameSuffix: -prod
 
-# Configuración específica para dev
-namePrefix: dev-
-nameSuffix: -dev
-
-# Patches específicos para dev (menos recursos)
 patches:
   - path: deployment_patch.yaml
+
+patchesStrategicMerge:
+  - frontend-tag.yaml
+  - backend-tag.yaml

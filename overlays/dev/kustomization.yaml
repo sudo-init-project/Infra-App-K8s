@@ -20,3 +20,7 @@ nameSuffix: -dev
 # Patches específicos para dev (menos recursos)
 patches:
   - path: deployment_patch.yaml
+
+patchesStrategicMerge:
+  - frontend-tag.yaml
+  - backend-tag.yaml
