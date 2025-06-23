@@ -1,0 +1,14 @@
+# BACKEND VERSION - STAGING
+# Cambiar image tag para actualizar versión
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: proyecto-cloud
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend
+        image: facundo676/backend-shop:stg-v1

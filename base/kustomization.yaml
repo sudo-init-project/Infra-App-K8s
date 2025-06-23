@@ -15,8 +15,5 @@ resources:
   - front/deployment.yaml
   - front/service.yaml
 
-images:
-  - name: facundo676/backend-shop
-    newTag: latest
-  - name: facundo676/frontend-shop
-    newTag: latest
+# NO especificar imágenes en base - cada overlay define sus propios tags
+# NUNCA usar latest en base dicho por pablo
