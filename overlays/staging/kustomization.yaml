@@ -16,3 +16,7 @@ patches:
 patchesStrategicMerge:
   - frontend-tag.yaml
   - backend-tag.yaml
+  
+images:
+  - name: facundo676/frontend-shop
+    newTag: latest
