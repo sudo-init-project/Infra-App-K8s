@@ -5,6 +5,9 @@ set -e
 # ULTIMATE DEPLOYMIUM
 #########################################
 
+# Base absoluto del proyecto (una carpeta arriba de "scripts")
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 ENVIRONMENT=$1
 
 # Validacion de ambiente
@@ -58,8 +61,8 @@ export JWT_SECRET="${JWT_SECRET:-GjPEfbM33noYJdEX4fymEken7svn6l81Xtnj9sX7Y7E=}"
 DOCKER_USER="facundo676"
 FRONTEND_REPO="$DOCKER_USER/frontend-shop"
 BACKEND_REPO="$DOCKER_USER/backend-shop"
-FRONTEND_DIR="../FrontEnd-Shop"
-BACKEND_DIR="../BackEnd-Shop"
+FRONTEND_DIR="$BASE_DIR/../FrontEnd-Shop"
+BACKEND_DIR="$BASE_DIR/../BackEnd-Shop"
 
 #########################################
 # FUNCIONES
@@ -72,7 +75,7 @@ log() {
 # Esto obtiene el tag
 get_file_tag() {
   local service=$1
-  local tag_file="overlays/$ENVIRONMENT/${service}-tag.yaml"
+  local tag_file="$BASE_DIR/overlays/$ENVIRONMENT/${service}-tag.yaml"
 
   if [ -f "$tag_file" ]; then
     grep "image:" "$tag_file" | cut -d: -f3 || echo "none"
@@ -85,7 +88,7 @@ get_file_tag() {
 update_tag_file() {
   local service=$1
   local tag=$2
-  local tag_file="overlays/$ENVIRONMENT/${service}-tag.yaml"
+  local tag_file="$BASE_DIR/overlays/$ENVIRONMENT/${service}-tag.yaml"
 
   if [ "$service" = "frontend" ]; then
     local repo="$FRONTEND_REPO"
@@ -166,12 +169,23 @@ generate_next_tag() {
   fi
 }
 
+echo "Frontend dir: $FRONTEND_DIR"
+echo "Backend dir: $BACKEND_DIR"
+
 compare_and_build() {
+  echo "🧪 Entré a compare_and_build con servicio: $1"
+  echo "🧪 Directorio recibido: $2"
+  echo "🧪 Repositorio recibido: $3"
+  echo "🧪 PWD actual: $(pwd)"
+  echo "🧪 Contenido del directorio:"
+  ls -la "$2"
   local service=$1
   local directory=$2
   local repo=$3
 
-  log "Verificando $service..."
+  log "🔍 Iniciando verificación para servicio '$service'"
+  log "   - Directorio: $directory"
+  log "   - Repositorio: $repo"
 
   if [ ! -d "$directory" ]; then
     log "❌ Directorio no encontrado: $directory"
@@ -236,10 +250,10 @@ compare_and_build() {
     cd "$directory"
 
     # Build imagen
-    if docker build --no-cache -t "$repo:$file_tag" . >/dev/null 2>&1; then
+    if docker build --no-cache -t "$repo:$file_tag" .; then
       log "Subiendo $repo:$file_tag..."
 
-      if docker push "$repo:$file_tag" >/dev/null 2>&1; then
+      if docker push "$repo:$file_tag"; then
         mark_build_complete "."
         log "✅ Build completado: $file_tag"
 
@@ -305,8 +319,11 @@ log "🔍 ============================================"
 log "🔍 VERIFICANDO Y CONSTRUYENDO IMÁGENES"
 log "🔍 ============================================"
 
+echo "Voy a llamar a compare_and_build para frontend"
+
 # Build servicios
 FRONTEND_TAG=$(compare_and_build "frontend" "$FRONTEND_DIR" "$FRONTEND_REPO")
+
 BACKEND_TAG=$(compare_and_build "backend" "$BACKEND_DIR" "$BACKEND_REPO")
 
 if [ -z "$FRONTEND_TAG" ] || [ -z "$BACKEND_TAG" ]; then
@@ -395,7 +412,7 @@ log ""
 log "📦 Desplegando con Kustomize..."
 
 # Aplicar manifiestos
-kubectl apply -k "overlays/$ENVIRONMENT/" 2>&1 | grep -v "Warning.*deprecated" || true
+kubectl apply -k "$BASE_DIR/overlays/$ENVIRONMENT/" 2>&1 | grep -v "Warning.*deprecated" || true
 
 log "✅ Deploy aplicado"
 
