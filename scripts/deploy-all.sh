@@ -454,7 +454,7 @@ log "📋 Estado de servicios:"
 kubectl get svc -n "$NAMESPACE" 2>/dev/null || log "❌ Error obteniendo servicios"
 
 echo ""
-echo "🎉 ¡DEPLOY COMPLETADO GIL!"
+echo "🎉 ¡DEPLOY COMPLETADO!"
 echo ""
 echo "📋 Versiones desplegadas:"
 echo "   Frontend: $FRONTEND_REPO:$FRONTEND_TAG"
