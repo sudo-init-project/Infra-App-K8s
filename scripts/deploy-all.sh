@@ -2,392 +2,242 @@
 set -e
 
 #########################################
-# ULTIMATE DEPLOYMIUM
+# deploy-all.sh v.2
+# script de deploy completo para proyecto cloud
+# incluye: minikube, sealed-secrets, argocd, kustomize
 #########################################
 
-# Base absoluto del proyecto (una carpeta arriba de "scripts")
+# directorio base del proyecto (una carpeta arriba de scripts)
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 ENVIRONMENT=$1
 
-# Validacion de ambiente
+# mostrar mensaje con timestamp
+log() {
+  echo "$(date '+%H:%M:%S') $1"
+}
+
+# validacion de ambiente
 if [ -z "$ENVIRONMENT" ]; then
-  echo "❌ ERROR: Debes especificar el ambiente ahi te pongo unos comandos para que sepas que hacer "
+  echo "ERROR: debes especificar el ambiente"
   echo ""
-  echo "Uso:"
+  echo "uso:"
   echo "  ./deploy-all.sh <ambiente>"
   echo ""
-  echo "Ambientes disponibles:"
-  echo "  dev         - Desarrollo"
-  echo "  staging     - Staging/Testing"
-  echo "  production  - Producción"
+  echo "ambientes disponibles:"
+  echo "  dev         - desarrollo"
+  echo "  staging     - staging/testing"
+  echo "  production  - produccion"
   echo ""
-  echo "Ejemplo:"
+  echo "ejemplo:"
   echo "  ./deploy-all.sh staging"
   exit 1
 fi
 
+echo "=========================================="
 echo "DEPLOY COMPLETO: $ENVIRONMENT"
-echo "================================"
+echo "=========================================="
 
+# configuracion segun ambiente
 case "$ENVIRONMENT" in
   dev)
     PROFILE="minikube-dev"
     NAMESPACE="proyecto-cloud-dev"
+    ARGOCD_APP_FILE="$BASE_DIR/argocd/dev-app.yaml"
     ;;
   staging)
     PROFILE="minikube-staging"
     NAMESPACE="proyecto-cloud-staging"
+    ARGOCD_APP_FILE="$BASE_DIR/argocd/staging-app.yaml"
     ;;
   production)
     PROFILE="minikube-production"
     NAMESPACE="proyecto-cloud-production"
+    ARGOCD_APP_FILE="$BASE_DIR/argocd/production-app.yaml"
     ;;
   *)
-    echo "❌ Usar: ./deploy-all.sh [dev|staging|production]"
+    echo "ERROR: ambiente no valido"
+    echo "usar: ./deploy-all.sh [dev|staging|production]"
     exit 1
     ;;
 esac
 
-echo "🟢 Ambiente: $ENVIRONMENT"
-echo "Perfil Minikube: $PROFILE"
-
-# Variables de entorno
+# variables para secrets (pueden ser sobreescritas con variables de entorno)
 export MYSQL_USER="${MYSQL_USER:-appuser}"
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:-devpass123}"
 export MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-rootpass123}"
 export JWT_SECRET="${JWT_SECRET:-GjPEfbM33noYJdEX4fymEken7svn6l81Xtnj9sX7Y7E=}"
 
+# repositorios de docker hub
 DOCKER_USER="facundo676"
 FRONTEND_REPO="$DOCKER_USER/frontend-shop"
 BACKEND_REPO="$DOCKER_USER/backend-shop"
-FRONTEND_DIR="$BASE_DIR/../FrontEnd-Shop"
-BACKEND_DIR="$BASE_DIR/../BackEnd-Shop"
+
+log "ambiente: $ENVIRONMENT"
+log "perfil minikube: $PROFILE"
+log "namespace: $NAMESPACE"
 
 #########################################
-# FUNCIONES
-#########################################
-
-log() {
-  echo "$(date '+%H:%M:%S') $1"
-}
-
-# Esto obtiene el tag
-get_file_tag() {
-  local service=$1
-  local tag_file="$BASE_DIR/overlays/$ENVIRONMENT/${service}-tag.yaml"
-
-  if [ -f "$tag_file" ]; then
-    grep "image:" "$tag_file" | cut -d: -f3 || echo "none"
-  else
-    echo "none"
-  fi
-}
-
-# Esta funcion actualiza los tags dependiendo de que caiga
-update_tag_file() {
-  local service=$1
-  local tag=$2
-  local tag_file="$BASE_DIR/overlays/$ENVIRONMENT/${service}-tag.yaml"
-
-  if [ "$service" = "frontend" ]; then
-    local repo="$FRONTEND_REPO"
-  else
-    local repo="$BACKEND_REPO"
-  fi
-
-  cat > "$tag_file" << EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: $service
-  namespace: proyecto-cloud
-spec:
-  template:
-    spec:
-      containers:
-      - name: $service
-        image: $repo:$tag
-EOF
-
-  log "📝 Actualizado $tag_file con tag: $tag"
-}
-
-# Esto agarra el tag del deployment actual
-get_deployment_tag() {
-  local service=$1
-  kubectl get deployment "${ENVIRONMENT}-${service}-${ENVIRONMENT:0:3}" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | cut -d: -f2 || echo "none"
-}
-
-# Esto verifica si existe la img en docker hub
-image_exists_remote() {
-  local image=$1
-  docker manifest inspect "$image" >/dev/null 2>&1
-}
-
-# Esto verifica si la img local existe
-image_exists_local() {
-  local image=$1
-  docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$image$"
-}
-
-# Hay cambios en el codigo?
-has_code_changes() {
-  local directory=$1
-  local hash_file="$directory/.build_hash"
-
-  if [ ! -f "$hash_file" ]; then
-    return 0  # No hay hash, no hay na mandamos los cambios
-  fi
-
-  local old_hash=$(cat "$hash_file" 2>/dev/null || echo "")
-  local new_hash=$(find "$directory" -type f \( -name "*.js" -o -name "*.java" -o -name "*.json" -o -name "*.xml" \) -exec md5sum {} \; 2>/dev/null | sort | md5sum | cut -d' ' -f1)
-
-  [ "$old_hash" != "$new_hash" ]
-}
-
-
-mark_build_complete() {
-  local directory=$1
-  local new_hash=$(find "$directory" -type f \( -name "*.js" -o -name "*.java" -o -name "*.json" -o -name "*.xml" \) -exec md5sum {} \; 2>/dev/null | sort | md5sum | cut -d' ' -f1)
-  echo "$new_hash" > "$directory/.build_hash"
-}
-
-generate_next_tag() {
-  local current_tag=$1
-  local prefix=""
-  local version=""
-
-  if [[ "$current_tag" =~ ^([a-z]+-v)([0-9]+)$ ]]; then
-    prefix="${BASH_REMATCH[1]}"
-    version="${BASH_REMATCH[2]}"
-    next_version=$((version + 1))
-    echo "${prefix}${next_version}"
-  else
-    # Si no tiene formato correcto, generar uno nuevo
-    echo "${ENVIRONMENT:0:3}-v1"
-  fi
-}
-
-echo "Frontend dir: $FRONTEND_DIR"
-echo "Backend dir: $BACKEND_DIR"
-
-compare_and_build() {
-  echo "🧪 Entré a compare_and_build con servicio: $1"
-  echo "🧪 Directorio recibido: $2"
-  echo "🧪 Repositorio recibido: $3"
-  echo "🧪 PWD actual: $(pwd)"
-  echo "🧪 Contenido del directorio:"
-  ls -la "$2"
-  local service=$1
-  local directory=$2
-  local repo=$3
-
-  log "🔍 Iniciando verificación para servicio '$service'"
-  log "   - Directorio: $directory"
-  log "   - Repositorio: $repo"
-
-  if [ ! -d "$directory" ]; then
-    log "❌ Directorio no encontrado: $directory"
-    return 1
-  fi
-
-  local file_tag=$(get_file_tag "$service")
-  local deployment_tag=$(get_deployment_tag "$service")
-
-  if [ "$file_tag" = "none" ]; then
-    # No hay tag en archivo, generar inicial
-    file_tag="${ENVIRONMENT:0:3}-v1"
-    log "🔨 Generando tag inicial: $file_tag"
-    build_needed=true
-  elif [ "$deployment_tag" = "none" ]; then
-    # No hay deployment, usar tag del archivo
-    log "🔨 No hay deployment, usando tag: $file_tag"
-    build_needed=true
-  elif [ "$file_tag" = "$deployment_tag" ]; then
-    # Tags son iguales, verificar cambios en código
-    log "📋 Tags iguales (archivo: $file_tag, deployment: $deployment_tag)"
-
-    if has_code_changes "$directory"; then
-      log "🔨 Cambios detectados en código, generando nueva versión"
-      file_tag=$(generate_next_tag "$file_tag")
-      build_needed=true
-    else
-      log "✅ Sin cambios en código, saltando build"
-      build_needed=false
-      echo "$file_tag"
-      return 0
-    fi
-  else
-    # Tags diferentes, usar el del archivo
-    log "Tags diferentes (archivo: $file_tag, deployment: $deployment_tag)"
-    log "Usando tag del archivo: $file_tag"
-
-    # Verificar si existe localmente
-    if image_exists_local "$repo:$file_tag"; then
-      log "✅ Imagen $repo:$file_tag existe localmente, no construyendo"
-      build_needed=false
-    # Verificar si existe remotamente
-    elif image_exists_remote "$repo:$file_tag"; then
-      log "📥 Imagen $repo:$file_tag existe remotamente, haciendo pull..."
-      if docker pull "$repo:$file_tag" >/dev/null 2>&1; then
-        log "✅ Pull completado, no construyendo"
-        build_needed=false
-      else
-        log "❌ Error en pull, construyendo..."
-        build_needed=true
-      fi
-    else
-      log "❌ Imagen $repo:$file_tag NO existe, construyendo..."
-      build_needed=true
-    fi
-  fi
-
-  # Construir solo si es necesario
-  if [ "$build_needed" = "true" ]; then
-    log "📦 Construyendo $service:$file_tag..."
-
-    cd "$directory"
-
-    # Build imagen
-    if docker build --no-cache -t "$repo:$file_tag" .; then
-      log "Subiendo $repo:$file_tag..."
-
-      if docker push "$repo:$file_tag"; then
-        mark_build_complete "."
-        log "✅ Build completado: $file_tag"
-
-        # Actualizar archivo de tag
-        cd - >/dev/null
-        update_tag_file "$service" "$file_tag"
-
-        echo "$file_tag"
-        return 0
-      else
-        log "❌ Error subiendo imagen"
-        cd - >/dev/null
-        return 1
-      fi
-    else
-      log "❌ Error construyendo imagen"
-      cd - >/dev/null
-      return 1
-    fi
-  else
-    log "⏭️ Saltando build para $service"
-    echo "$file_tag"
-    return 0
-  fi
-}
-
-#########################################
-# VERIFICAR Y CONFIGURAR MINIKUBE
-#########################################
-log "Verificando y configurando Minikube..."
-
-# Verificar que el perfil existe
-if ! minikube profile list | grep -q "$PROFILE"; then
-  log "❌ Perfil $PROFILE no existe"
-  log "Crealo con:"
-  log "   minikube start -p $PROFILE --cpus=4 --memory=4092"
-  exit 1
-fi
-
-# Verificar que está corriendo
-if ! minikube status -p "$PROFILE" 2>/dev/null | grep -q "Running"; then
-  log "Minikube $PROFILE no está corriendo"
-  log "Inicia con:"
-  log "   minikube start -p $PROFILE"
-  exit 1
-fi
-
-# Cambiar al perfil correcto
-log "🔄 Cambiando al perfil: $PROFILE"
-minikube profile "$PROFILE" >/dev/null 2>&1
-
-# Configurar kubectl al contexto correcto
-kubectl config use-context "$PROFILE" >/dev/null 2>&1
-
-log "✅ Minikube configurado: $PROFILE"
-log "📋 Contexto actual: $(kubectl config current-context)"
-
-#########################################
-# BUILD IMÁGENES
+# paso 1: verificar y configurar minikube
 #########################################
 log ""
-log "🔍 ============================================"
-log "🔍 VERIFICANDO Y CONSTRUYENDO IMÁGENES"
-log "🔍 ============================================"
+log "=========================================="
+log "PASO 1: configurando minikube"
+log "=========================================="
 
-echo "Voy a llamar a compare_and_build para frontend"
-
-# Build servicios
-FRONTEND_TAG=$(compare_and_build "frontend" "$FRONTEND_DIR" "$FRONTEND_REPO")
-
-BACKEND_TAG=$(compare_and_build "backend" "$BACKEND_DIR" "$BACKEND_REPO")
-
-if [ -z "$FRONTEND_TAG" ] || [ -z "$BACKEND_TAG" ]; then
-  log "❌ Error en construcción de imágenes"
-  exit 1
-fi
-
-log ""
-log "📋 Tags finales:"
-log "   Frontend: $FRONTEND_REPO:$FRONTEND_TAG"
-log "   Backend: $BACKEND_REPO:$BACKEND_TAG"
-
-#########################################
-# PREPARAR AMBIENTE
-#########################################
-log ""
-log "🎯 Preparando ambiente..."
-
-# Crear namespace
-kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
-
-# Borrar secrets existentes primero
-kubectl delete secret mysql-secret app-secret -n "$NAMESPACE" 2>/dev/null || true
-
-# Crear secrets
-kubectl create secret generic mysql-secret \
-  --from-literal=username="$MYSQL_USER" \
-  --from-literal=password="$MYSQL_PASSWORD" \
-  --from-literal=root-password="$MYSQL_ROOT_PASSWORD" \
-  --namespace="$NAMESPACE" >/dev/null 2>&1
-
-kubectl create secret generic app-secret \
-  --from-literal=jwt-secret="$JWT_SECRET" \
-  --namespace="$NAMESPACE" >/dev/null 2>&1
-
-log "✅ Secrets creados"
-
-#########################################
-# INSTALAR ARGOCD
-#########################################
-log "🚀 Verificando ArgoCD..."
-
-if ! kubectl get namespace argocd >/dev/null 2>&1; then
-  log "🚀 Instalando ArgoCD..."
-  kubectl create namespace argocd >/dev/null 2>&1
-  kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml >/dev/null 2>&1
-
-  log "⏳ Esperando ArgoCD..."
-  kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s >/dev/null 2>&1
-
-  log "✅ ArgoCD instalado"
+# verificar si el perfil existe
+if ! minikube profile list 2>/dev/null | grep -q "$PROFILE"; then
+  log "el perfil $PROFILE no existe, creandolo..."
+  minikube start -p "$PROFILE" --cpus=4 --memory=4096 --driver=docker
+  log "perfil $PROFILE creado"
 else
-  log "✅ ArgoCD ya existe"
+  # verificar si esta corriendo
+  if ! minikube status -p "$PROFILE" 2>/dev/null | grep -q "Running"; then
+    log "iniciando minikube con perfil $PROFILE..."
+    minikube start -p "$PROFILE"
+  else
+    log "minikube ya esta corriendo con perfil $PROFILE"
+  fi
 fi
 
-# Crear/actualizar aplicación ArgoCD
-kubectl delete application "proyecto-cloud-$ENVIRONMENT" -n argocd --ignore-not-found=true >/dev/null 2>&1
+# cambiar al perfil correcto
+minikube profile "$PROFILE"
+log "usando perfil: $PROFILE"
 
-cat << EOF | kubectl apply -f - >/dev/null 2>&1
+# verificar contexto de kubectl
+CURRENT_CONTEXT=$(kubectl config current-context 2>/dev/null || echo "none")
+log "contexto kubectl actual: $CURRENT_CONTEXT"
+
+#########################################
+# paso 2: instalar sealed secrets
+#########################################
+log ""
+log "=========================================="
+log "PASO 2: configurando sealed secrets"
+log "=========================================="
+
+# verificar si sealed secrets ya esta instalado
+if kubectl get deployment sealed-secrets-controller -n kube-system >/dev/null 2>&1; then
+  log "sealed secrets ya esta instalado"
+else
+  log "instalando sealed secrets controller..."
+  kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.5/controller.yaml
+
+  log "esperando a que sealed secrets este listo..."
+  kubectl wait --for=condition=ready pod -l name=sealed-secrets-controller -n kube-system --timeout=120s
+  log "sealed secrets instalado correctamente"
+fi
+
+# verificar si kubeseal esta instalado localmente
+if ! command -v kubeseal &> /dev/null; then
+  log "AVISO: kubeseal no esta instalado localmente"
+  log "para crear sealed secrets, instalar con:"
+  log "  wget https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.5/kubeseal-0.24.5-linux-amd64.tar.gz"
+  log "  tar -xvzf kubeseal-0.24.5-linux-amd64.tar.gz"
+  log "  sudo install -m 755 kubeseal /usr/local/bin/kubeseal"
+else
+  log "kubeseal esta instalado: $(kubeseal --version 2>/dev/null || echo 'version desconocida')"
+fi
+
+#########################################
+# paso 3: crear namespace y secrets
+#########################################
+log ""
+log "=========================================="
+log "PASO 3: creando namespace y secrets"
+log "=========================================="
+
+# crear namespace si no existe
+if ! kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
+  log "creando namespace $NAMESPACE..."
+  kubectl create namespace "$NAMESPACE"
+else
+  log "namespace $NAMESPACE ya existe"
+fi
+
+# verificar si los secrets existen, si no crearlos
+# nota: en produccion real, usar sealed secrets desde git
+# estos secrets manuales son para desarrollo local
+
+if ! kubectl get secret mysql-secret -n "$NAMESPACE" >/dev/null 2>&1; then
+  log "creando mysql-secret..."
+  kubectl create secret generic mysql-secret \
+    --from-literal=root-password="$MYSQL_ROOT_PASSWORD" \
+    --from-literal=username="$MYSQL_USER" \
+    --from-literal=password="$MYSQL_PASSWORD" \
+    -n "$NAMESPACE"
+  log "mysql-secret creado"
+else
+  log "mysql-secret ya existe"
+fi
+
+if ! kubectl get secret app-secret -n "$NAMESPACE" >/dev/null 2>&1; then
+  log "creando app-secret..."
+  kubectl create secret generic app-secret \
+    --from-literal=jwt-secret="$JWT_SECRET" \
+    -n "$NAMESPACE"
+  log "app-secret creado"
+else
+  log "app-secret ya existe"
+fi
+
+log "secrets configurados:"
+kubectl get secrets -n "$NAMESPACE" 2>/dev/null | grep -E "mysql-secret|app-secret" || true
+
+#########################################
+# paso 4: instalar argocd
+#########################################
+log ""
+log "=========================================="
+log "PASO 4: configurando argocd"
+log "=========================================="
+
+# verificar si argocd ya esta instalado
+if ! kubectl get namespace argocd >/dev/null 2>&1; then
+  log "instalando argocd..."
+  kubectl create namespace argocd
+  kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+  log "esperando a que argocd este listo (esto puede tardar unos minutos)..."
+  kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
+  log "argocd instalado correctamente"
+else
+  log "argocd ya esta instalado"
+  # verificar que este corriendo
+  if ! kubectl get deployment argocd-server -n argocd >/dev/null 2>&1; then
+    log "reinstalando argocd..."
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
+  fi
+fi
+
+# aplicar configuracion de argocd si existe
+if [ -f "$BASE_DIR/argocd-cm.yaml" ]; then
+  log "aplicando configuracion de argocd..."
+  kubectl apply -f "$BASE_DIR/argocd-cm.yaml" 2>/dev/null || true
+fi
+
+if [ -f "$BASE_DIR/argocd-cmd-params-cm.yaml" ]; then
+  kubectl apply -f "$BASE_DIR/argocd-cmd-params-cm.yaml" 2>/dev/null || true
+fi
+
+# crear aplicacion de argocd para el ambiente
+if [ -f "$ARGOCD_APP_FILE" ]; then
+  log "aplicando configuracion de argocd desde: $ARGOCD_APP_FILE"
+  kubectl apply -f "$ARGOCD_APP_FILE"
+  log "aplicacion argocd configurada"
+else
+  log "AVISO: archivo $ARGOCD_APP_FILE no encontrado"
+  log "creando aplicacion argocd generica..."
+
+  cat << EOF | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: proyecto-cloud-$ENVIRONMENT
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
@@ -401,87 +251,148 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
 EOF
-
-log "✅ ArgoCD aplicación configurada"
-
-#########################################
-# DEPLOY
-#########################################
-log ""
-log "📦 Desplegando con Kustomize..."
-
-# Aplicar manifiestos
-kubectl apply -k "$BASE_DIR/overlays/$ENVIRONMENT/" 2>&1 | grep -v "Warning.*deprecated" || true
-
-log "✅ Deploy aplicado"
-
-#########################################
-# ESPERAR PODS
-#########################################
-log "⏳ Esperando que los pods estén listos..."
-
-log "🔄 Esperando frontend..."
-if kubectl rollout status deployment/${ENVIRONMENT}-frontend-${ENVIRONMENT:0:3} -n "$NAMESPACE" --timeout=180s 2>/dev/null; then
-  log "✅ Frontend listo"
-else
-  log "⚠️ Frontend tardó mucho, continuando..."
-fi
-
-log "🔄 Esperando backend..."
-if kubectl rollout status deployment/${ENVIRONMENT}-backend-${ENVIRONMENT:0:3} -n "$NAMESPACE" --timeout=180s 2>/dev/null; then
-  log "✅ Backend listo"
-else
-  log "⚠️ Backend tardó mucho, continuando..."
-fi
-
-log "🔄 Esperando MySQL..."
-if kubectl rollout status statefulset/${ENVIRONMENT}-mysql-${ENVIRONMENT:0:3} -n "$NAMESPACE" --timeout=120s 2>/dev/null; then
-  log "✅ MySQL listo"
-else
-  log "⚠️ MySQL tardó mucho, continuando..."
 fi
 
 #########################################
-# ESTADO FINAL
+# paso 5: deploy con kustomize
 #########################################
 log ""
-log "📋 Estado de pods:"
-kubectl get pods -n "$NAMESPACE" 2>/dev/null || log "❌ Error obteniendo pods"
+log "=========================================="
+log "PASO 5: desplegando con kustomize"
+log "=========================================="
 
+OVERLAY_PATH="$BASE_DIR/overlays/$ENVIRONMENT"
+
+if [ -d "$OVERLAY_PATH" ]; then
+  log "aplicando manifiestos desde: $OVERLAY_PATH"
+  kubectl apply -k "$OVERLAY_PATH" 2>&1 | grep -v "Warning.*deprecated" || true
+  log "manifiestos aplicados"
+else
+  log "ERROR: no se encontro el overlay en $OVERLAY_PATH"
+  exit 1
+fi
+
+#########################################
+# paso 6: esperar a que los pods esten listos
+#########################################
 log ""
-log "📋 Estado de servicios:"
-kubectl get svc -n "$NAMESPACE" 2>/dev/null || log "❌ Error obteniendo servicios"
+log "=========================================="
+log "PASO 6: esperando pods"
+log "=========================================="
+
+# obtener prefijo de nombres segun ambiente
+# los deployments tienen nombres como: staging-frontend-stg, staging-backend-stg, etc
+ENV_PREFIX="${ENVIRONMENT}"
+ENV_SUFFIX="${ENVIRONMENT:0:3}"
+
+log "esperando frontend..."
+if kubectl rollout status deployment/${ENV_PREFIX}-frontend-${ENV_SUFFIX} -n "$NAMESPACE" --timeout=180s 2>/dev/null; then
+  log "frontend listo"
+else
+  log "AVISO: frontend tardo mucho, continuando..."
+fi
+
+log "esperando backend..."
+if kubectl rollout status deployment/${ENV_PREFIX}-backend-${ENV_SUFFIX} -n "$NAMESPACE" --timeout=180s 2>/dev/null; then
+  log "backend listo"
+else
+  log "AVISO: backend tardo mucho, continuando..."
+fi
+
+log "esperando mysql..."
+if kubectl rollout status statefulset/${ENV_PREFIX}-mysql-${ENV_SUFFIX} -n "$NAMESPACE" --timeout=180s 2>/dev/null; then
+  log "mysql listo"
+else
+  log "AVISO: mysql tardo mucho, continuando..."
+fi
+
+#########################################
+# paso 7: mostrar estado final
+#########################################
+log ""
+log "=========================================="
+log "ESTADO FINAL"
+log "=========================================="
 
 echo ""
-echo "🎉 ¡DEPLOY COMPLETADO!"
-echo ""
-echo "📋 Versiones desplegadas:"
-echo "   Frontend: $FRONTEND_REPO:$FRONTEND_TAG"
-echo "   Backend: $BACKEND_REPO:$BACKEND_TAG"
-echo ""
+echo "pods:"
+kubectl get pods -n "$NAMESPACE" 2>/dev/null || echo "error obteniendo pods"
 
+echo ""
+echo "servicios:"
+kubectl get svc -n "$NAMESPACE" 2>/dev/null || echo "error obteniendo servicios"
+
+echo ""
+echo "aplicacion argocd:"
+kubectl get application -n argocd 2>/dev/null | grep "$ENVIRONMENT" || echo "no se encontro aplicacion"
+
+#########################################
+# paso 8: mostrar informacion de acceso
+#########################################
+log ""
+log "=========================================="
+log "DEPLOY COMPLETADO"
+log "=========================================="
+
+# obtener password de argocd
 ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null)
-
 if [ -z "$ARGOCD_PASSWORD" ]; then
-  ARGOCD_PASSWORD="admin"
+  ARGOCD_PASSWORD="(no disponible, verificar instalacion)"
 fi
 
-echo "🌐 ACCESO A ARGOCD:"
-echo "   UI: kubectl port-forward svc/argocd-server -n argocd 8080:443"
-echo "   URL: https://localhost:8080"
-echo "   Usuario: admin"
-echo "   Password: $ARGOCD_PASSWORD"
 echo ""
-echo "🌐 ACCESO A LA APLICACIÓN:"
-echo "   Frontend: kubectl port-forward svc/${ENVIRONMENT}-frontend-service-${ENVIRONMENT:0:3} -n $NAMESPACE 3000:80"
-echo "   URL: http://localhost:3000"
-echo "   Login: admin / admin"
+echo "ACCESO A ARGOCD:"
+echo "  1. ejecutar: kubectl port-forward svc/argocd-server -n argocd 8080:443"
+echo "  2. abrir: https://localhost:8080"
+echo "  3. usuario: admin"
+echo "  4. password: $ARGOCD_PASSWORD"
 echo ""
+echo "ACCESO A LA APLICACION:"
+echo "  1. ejecutar: kubectl port-forward svc/${ENV_PREFIX}-frontend-service-${ENV_SUFFIX} -n $NAMESPACE 3000:80"
+echo "  2. abrir: http://localhost:3000"
+echo "  3. login: admin / admin"
 echo ""
-echo "💡 Para verificar el estado:"
-echo "   kubectl get pods -n $NAMESPACE"
-echo "   kubectl logs -f deployment/${ENVIRONMENT}-backend-${ENVIRONMENT:0:3} -n $NAMESPACE"
+echo "COMANDOS UTILES:"
+echo "  ver pods:     kubectl get pods -n $NAMESPACE"
+echo "  ver logs:     kubectl logs -f deployment/${ENV_PREFIX}-backend-${ENV_SUFFIX} -n $NAMESPACE"
+echo "  ver argocd:   kubectl get application -n argocd"
 echo ""
-echo "Cluster activo: $PROFILE"
-echo "Para cambiar manualmente: minikube profile $PROFILE"
+echo "CLUSTER ACTIVO: $PROFILE"
+echo ""
+
+#########################################
+# paso 9 (opcional): generar sealed secrets
+#########################################
+# esta seccion muestra como generar sealed secrets para git
+# descomentar si se quiere generar automaticamente
+
+# if command -v kubeseal &> /dev/null; then
+#   log "generando sealed secrets para git..."
+#
+#   SEALED_DIR="$BASE_DIR/base/secrets"
+#   mkdir -p "$SEALED_DIR"
+#
+#   # generar mysql sealed secret
+#   kubectl create secret generic mysql-secret \
+#     --from-literal=root-password="$MYSQL_ROOT_PASSWORD" \
+#     --from-literal=username="$MYSQL_USER" \
+#     --from-literal=password="$MYSQL_PASSWORD" \
+#     --namespace="$NAMESPACE" \
+#     --dry-run=client -o yaml | \
+#     kubeseal --controller-namespace kube-system --controller-name sealed-secrets-controller --format yaml \
+#     > "$SEALED_DIR/mysql-sealed-secret.yaml"
+#
+#   # generar app sealed secret
+#   kubectl create secret generic app-secret \
+#     --from-literal=jwt-secret="$JWT_SECRET" \
+#     --namespace="$NAMESPACE" \
+#     --dry-run=client -o yaml | \
+#     kubeseal --controller-namespace kube-system --controller-name sealed-secrets-controller --format yaml \
+#     > "$SEALED_DIR/app-sealed-secret.yaml"
+#
+#   log "sealed secrets generados en: $SEALED_DIR"
+#   log "IMPORTANTE: hacer commit de estos archivos a git"
+# fi
