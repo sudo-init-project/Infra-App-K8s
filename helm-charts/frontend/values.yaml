@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  repository: facundo676/frontend-shop
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+env:
+  REACT_APP_ENV: "dev"
+  REACT_APP_API_URL: "http://backend-dev-service:8080"
