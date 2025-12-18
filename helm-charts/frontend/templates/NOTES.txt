@@ -1,0 +1,6 @@
+El se desplego en {{ .Release.Namespace }}!
+
+Para acceder hace esto capo:
+  kubectl port-forward service/{{ .Release.Name }}-service 3000:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+Luego abri: http://localhost:3000

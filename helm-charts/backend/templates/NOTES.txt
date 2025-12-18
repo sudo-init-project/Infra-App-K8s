@@ -1,0 +1,6 @@
+El se desplego en {{ .Release.Namespace }}
+Para acceder hace esto capo: {{ .Release.Name }}-service:{{ .Values.service.port }}
+
+Health check:
+  kubectl port-forward service/{{ .Release.Name }}-service 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  curl http://localhost:8080/actuator/health

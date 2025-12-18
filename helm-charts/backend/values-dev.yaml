@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  repository: facundo676/backend-shop
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+resources:
+  limits:
+    cpu: 300m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+env:
+  SPRING_PROFILES_ACTIVE: "dev"
+  SERVER_PORT: "8080"
