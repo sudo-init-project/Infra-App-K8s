@@ -18,6 +18,8 @@ resources:
     cpu: 50m
     memory: 64Mi
 
+backendServiceName: backend-dev-service
+
 env:
   REACT_APP_ENV: "dev"
   REACT_APP_API_URL: "http://backend-dev-service:8080"

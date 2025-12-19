@@ -18,6 +18,8 @@ resources:
     cpu: 100m
     memory: 128Mi
 
+backendServiceName: backend-test-service
+
 env:
   REACT_APP_ENV: "test"
   REACT_APP_API_URL: "http://backend-test-service:8080"
