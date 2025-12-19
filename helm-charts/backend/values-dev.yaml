@@ -19,5 +19,5 @@ resources:
     memory: 128Mi
 
 env:
-  SPRING_PROFILES_ACTIVE: "dev"
+  SPRING_PROFILES_ACTIVE: "demo" #se puede poner dev pero necesita mysql
   SERVER_PORT: "8080"
