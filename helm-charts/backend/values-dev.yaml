@@ -12,11 +12,11 @@ service:
 
 resources:
   limits:
-    cpu: 300m
-    memory: 256Mi
+    cpu: 500m
+    memory: 512i
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 200m
+    memory: 256Mi
 
 env:
   SPRING_PROFILES_ACTIVE: "demo" #se puede poner dev pero necesita mysql
