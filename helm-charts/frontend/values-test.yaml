@@ -21,3 +21,4 @@ resources:
 env:
   REACT_APP_ENV: "test"
   REACT_APP_API_URL: "http://backend-test-service:8080"
+  BACKEND_SERVICE_HOST: "backend-test-service"
