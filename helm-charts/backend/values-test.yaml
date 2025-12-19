@@ -19,5 +19,5 @@ resources:
     memory: 256Mi
 
 env:
-  SPRING_PROFILES_ACTIVE: "test"
+  SPRING_PROFILES_ACTIVE: "demo"
   SERVER_PORT: "8080"
