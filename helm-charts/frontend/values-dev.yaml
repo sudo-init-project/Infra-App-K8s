@@ -21,3 +21,4 @@ resources:
 env:
   REACT_APP_ENV: "dev"
   REACT_APP_API_URL: "http://backend-dev-service:8080"
+  BACKEND_SERVICE_HOST: "backend-dev-service"  # Nueva variable
