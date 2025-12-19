@@ -36,17 +36,17 @@ spec:
           limits:
             memory: {{ .Values.resources.limits.memory }}
             cpu: {{ .Values.resources.limits.cpu }}
-        livenessProbe:
-          httpGet:
-            path: /actuator/health
-            port: {{ .Values.service.targetPort }}
-          initialDelaySeconds: 60
-          periodSeconds: 10
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /actuator/health
-            port: {{ .Values.service.targetPort }}
-          initialDelaySeconds: 30
-          periodSeconds: 5
-          failureThreshold: 3
+       # livenessProbe:
+       #   httpGet:
+       #     path: /actuator/health
+       #     port: {{ .Values.service.targetPort }}
+       #   initialDelaySeconds: 60
+       #   periodSeconds: 10
+       #   failureThreshold: 3
+       # readinessProbe:
+       #   httpGet:
+       #     path: /actuator/health
+       #     port: {{ .Values.service.targetPort }}
+       #   initialDelaySeconds: 30
+       #   periodSeconds: 5
+       #   failureThreshold: 3
