@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: facundo676/backend-shop
   tag: "20251219-053655-17e93f0"
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 service:
   type: ClusterIP
