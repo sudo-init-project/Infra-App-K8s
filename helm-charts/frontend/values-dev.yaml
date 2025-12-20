@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: facundo676/frontend-shop
   tag: "20251219-234757-0d7a603"
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 service:
   type: ClusterIP
@@ -18,9 +18,6 @@ resources:
     cpu: 50m
     memory: 64Mi
 
-backendServiceName: backend-dev-service
-
 env:
   REACT_APP_ENV: "dev"
   REACT_APP_API_URL: "http://backend-dev-service:8080"
-  BACKEND_SERVICE_HOST: "backend-dev-service"  # Nueva variable

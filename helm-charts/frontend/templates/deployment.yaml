@@ -16,13 +16,9 @@ spec:
       containers:
       - name: frontend
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        imagePullPolicy: Always
         ports:
         - containerPort: {{ .Values.service.targetPort }}
-        volumeMounts:                           # ← AGREGAR ESTO
-        - name: nginx-config                    # ← AGREGAR ESTO
-          mountPath: /etc/nginx/conf.d          # ← AGREGAR ESTO
-          readOnly: true                        # ← AGREGAR ESTO
         env:
         {{- range $key, $value := .Values.env }}
         - name: {{ $key }}
@@ -35,7 +31,3 @@ spec:
           limits:
             memory: {{ .Values.resources.limits.memory }}
             cpu: {{ .Values.resources.limits.cpu }}
-      volumes:
-      - name: nginx-config
-        configMap:
-          name: {{ .Release.Name }}-nginx-config
