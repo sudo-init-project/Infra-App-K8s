@@ -2,7 +2,7 @@ replicaCount: 2
 
 image:
   repository: facundo676/backend-shop
-  tag: "20251222-201128-b363b65"
+  tag: "20251222-202105-66ce865"
   pullPolicy: Always
 
 service:
