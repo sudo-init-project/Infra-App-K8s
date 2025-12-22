@@ -4,6 +4,7 @@ Repositorio de infraestructura GitOps para deployment automatizado de microservi
 
 **Principio fundamental:** Git es la unica fuente de verdad del estado del cluster.
 
+ACLARACION: si no te interesa las cosas tecnicas y solo queres deployear hay una carpeta dentro de fintexa-gitops-infra/scripts lo ejecutas y te deployea todo
 ---
 
 ## Tabla de Contenidos
